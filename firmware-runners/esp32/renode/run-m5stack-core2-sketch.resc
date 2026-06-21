@@ -1,0 +1,15 @@
+# M5Stack Core2 Renode script sketch.
+#
+# This file records the intended Renode entry point. It is not expected to boot
+# the current ESP32 firmware until the platform description and peripheral
+# models exist. See ROADMAP.md.
+
+mach create "m5stack-core2"
+machine LoadPlatformDescription $ORIGIN/m5stack-core2-sketch.repl
+
+# Future shape:
+# sysbus LoadBinary @flash.bin 0x0
+# showAnalyzer uart0
+# start
+
+echo "M5Stack Core2 Renode platform is a skeleton. See renode/ROADMAP.md for the path to a bootable GAR virtual board."

@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "$#" -lt 1 ]; then
+  echo "usage: gar-esp32-qemu-run FLASH_IMAGE [qemu args...]" >&2
+  exit 2
+fi
+
+flash_image=$1
+shift
+
+if ! command -v qemu-system-xtensa >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+qemu-system-xtensa was not found.
+
+Install Espressif QEMU through ESP-IDF, then source export.sh:
+
+  python "$IDF_PATH/tools/idf_tools.py" install qemu-xtensa
+  . "$IDF_PATH/export.sh"
+EOF
+  exit 127
+fi
+
+exec qemu-system-xtensa \
+  -nographic \
+  -machine esp32 \
+  -drive "file=${flash_image},if=mtd,format=raw" \
+  "$@"
+

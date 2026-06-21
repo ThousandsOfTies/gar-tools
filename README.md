@@ -6,6 +6,8 @@ Gapless Agent Runtime のシミュレーション環境で使うツール群で�
 
 - `cuse-stubs/`: EC2 Graviton などで I2C/GPIO/SPI を仮想化するスタブ
 - `cuse-stubs/web-bridge/`: 仮想ハードウェア操作用の HTTP bridge
+- `firmware-runners/esp32/`: ESP32/M5Stack firmware artifact を QEMU/Renode/BT SPP へ接続する足場
+  - `firmware-runners/esp32/renode/m5status-tiny/`: Renode で動く最小 Xtensa firmware smoke test
 - `scripts/run_scenario.py`: bridge に対してシナリオを実行する補助ツール
 - `setup_ssh.sh`, `ssh_config.template`: Remote SSH 用の補助ファイル
 - `docs/`: シミュレーション設定と AI エージェント操作メモ

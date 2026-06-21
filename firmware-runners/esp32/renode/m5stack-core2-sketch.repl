@@ -1,0 +1,14 @@
+// M5Stack Core2 / ESP32 Renode platform sketch.
+//
+// This is a contract sketch, not a bootable platform yet. The long-term GAR
+// direction is to grow this into an AI-maintained virtual board. See
+// ROADMAP.md in this directory for milestones and non-goals.
+
+// Desired hardware surface:
+// - ESP32 / Xtensa LX6 CPUs
+// - internal RAM and boot ROM mapping
+// - SPI flash mapping with bootloader, partition table, boot_app0, app
+// - UART0 analyzer
+// - GPIO buttons A/B/C
+// - SPI LCD compatible with the M5Stack display path
+// - Wi-Fi/network model or protocol bridge suitable for Vibe Remote

@@ -1,0 +1,142 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import select
+import sys
+import termios
+import time
+import tty
+from pathlib import Path
+from typing import Any
+
+
+BAUD_RATES = {
+    9600: termios.B9600,
+    19200: termios.B19200,
+    38400: termios.B38400,
+    57600: termios.B57600,
+    115200: termios.B115200,
+    230400: termios.B230400,
+    460800: termios.B460800,
+    921600: termios.B921600,
+}
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Probe a Bluetooth Classic SPP serial link that speaks Vibe Remote "
+            "newline-delimited JSON."
+        )
+    )
+    parser.add_argument(
+        "port",
+        type=Path,
+        help="SPP serial device, for example /dev/rfcomm0.",
+    )
+    parser.add_argument(
+        "--token",
+        required=True,
+        help="Vibe Remote shared token.",
+    )
+    parser.add_argument(
+        "--baud",
+        type=int,
+        default=115200,
+        choices=sorted(BAUD_RATES),
+        help="Serial baud rate. Default: 115200.",
+    )
+    parser.add_argument(
+        "--status",
+        choices=("running", "waiting", "done", "failed", "idle"),
+        help="Optionally send an agentStatus message after hello.",
+    )
+    parser.add_argument(
+        "--message",
+        default="gar-spp-jsonl-probe",
+        help="agentStatus message when --status is used.",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=8.0,
+        help="Seconds to wait for inbound JSON. Default: 8.",
+    )
+    return parser.parse_args()
+
+
+def configure_serial(fd: int, baud: int) -> list[Any]:
+    old = termios.tcgetattr(fd)
+    tty.setraw(fd)
+    attrs = termios.tcgetattr(fd)
+    attrs[4] = BAUD_RATES[baud]
+    attrs[5] = BAUD_RATES[baud]
+    attrs[2] |= termios.CLOCAL | termios.CREAD
+    attrs[6][termios.VMIN] = 0
+    attrs[6][termios.VTIME] = 0
+    termios.tcsetattr(fd, termios.TCSANOW, attrs)
+    return old
+
+
+def write_json(fd: int, payload: dict[str, Any]) -> None:
+    line = json.dumps(payload, separators=(",", ":")) + "\n"
+    os.write(fd, line.encode("utf-8"))
+    print(f"> {line.rstrip()}")
+
+
+def read_available(fd: int, buffer: str) -> str:
+    data = os.read(fd, 4096)
+    if not data:
+        return buffer
+    buffer += data.decode("utf-8", errors="replace")
+    while "\n" in buffer:
+        line, buffer = buffer.split("\n", 1)
+        line = line.strip()
+        if line:
+            print(f"< {line}")
+    return buffer
+
+
+def main() -> int:
+    args = parse_args()
+    port = args.port.expanduser()
+
+    fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+    old_attrs = configure_serial(fd, args.baud)
+    try:
+        write_json(fd, {"type": "hello", "token": args.token})
+        if args.status:
+            write_json(
+                fd,
+                {
+                    "type": "agentStatus",
+                    "token": args.token,
+                    "status": args.status,
+                    "source": "gar-tools",
+                    "message": args.message,
+                    "ttlMs": 120000,
+                },
+            )
+        write_json(fd, {"type": "ping", "token": args.token})
+
+        deadline = time.monotonic() + args.timeout
+        buffer = ""
+        while time.monotonic() < deadline:
+            readable, _, _ = select.select([fd], [], [], 0.25)
+            if fd in readable:
+                buffer = read_available(fd, buffer)
+    finally:
+        termios.tcsetattr(fd, termios.TCSANOW, old_attrs)
+        os.close(fd)
+
+    return 0
+
+
+if __name__ == "__main__":
+    if os.name != "posix":
+        print("gar-spp-jsonl-probe currently supports POSIX serial devices only.", file=sys.stderr)
+        raise SystemExit(2)
+    raise SystemExit(main())
