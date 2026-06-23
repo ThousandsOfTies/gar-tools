@@ -1,4 +1,4 @@
-# cuse-stubs/Makefile — simulation tools build
+# Linux device runtime simulation tools build
 
 CC = aarch64-linux-gnu-gcc
 

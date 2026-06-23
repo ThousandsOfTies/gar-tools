@@ -22,13 +22,13 @@ with a GAR-built tiny UART firmware that prints `GAR_RENODE_HELLO`.
 ```bash
 cd ~/Yurufuwa/gar-tools
 renode --console --disable-xwt --execute \
-  "include @firmware-runners/esp32/renode/m5status-tiny/run.resc; start; quit"
+  "include @targets/esp32/renode/m5status-tiny/run.resc; start; quit"
 ```
 
 ## Test
 
 ```bash
 cd ~/Yurufuwa/gar-tools
-renode-test firmware-runners/esp32/renode/m5status-tiny/m5status-tiny.robot
+renode-test targets/esp32/renode/m5status-tiny/m5status-tiny.robot
 ```
 

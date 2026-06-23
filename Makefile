@@ -5,7 +5,7 @@ CC = aarch64-linux-gnu-gcc
 .PHONY: all clean
 
 all:
-	$(MAKE) -C cuse-stubs CC=$(CC)
+	$(MAKE) -C targets/linux-device/runtime CC=$(CC)
 
 clean:
-	$(MAKE) -C cuse-stubs clean
+	$(MAKE) -C targets/linux-device/runtime clean

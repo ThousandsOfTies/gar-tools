@@ -4,10 +4,10 @@ Gapless Agent Runtime のシミュレーション環境で使うツール群で�
 
 主な内容:
 
-- `cuse-stubs/`: EC2 Graviton などで I2C/GPIO/SPI を仮想化するスタブ
-- `cuse-stubs/web-bridge/`: 仮想ハードウェア操作用の HTTP bridge
-- `firmware-runners/esp32/`: ESP32/M5Stack firmware artifact を QEMU/Renode/BT SPP へ接続する足場
-  - `firmware-runners/esp32/renode/m5status-tiny/`: Renode で動く最小 Xtensa firmware smoke test
+- `targets/linux-device/`: Linux `/dev` 互換 runtime（EC2 Graviton などで利用）
+  - `targets/linux-device/runtime/`: I2C/GPIO/SPI CUSE stubs、web-bridge、テストアプリ
+- `targets/esp32/`: ESP32/M5Stack firmware artifact を QEMU/Renode/BT SPP へ接続する足場
+  - `targets/esp32/renode/m5status-tiny/`: Renode で動く最小 Xtensa firmware smoke test
 - `scripts/run_scenario.py`: bridge に対してシナリオを実行する補助ツール
 - `setup_ssh.sh`, `ssh_config.template`: Remote SSH 用の補助ファイル
 - `docs/`: シミュレーション設定と AI エージェント操作メモ
@@ -23,9 +23,9 @@ Codespace build VM では ARM64 向けにビルドします。EC2 への転送�
 
 ## GPIO CUSE spike
 
-`cuse-stubs/gpio-stub/` に `cuse_gpio` の実装スパイクがあります。GPIO chip metadata と bridge 連携の検証用です。
+`targets/linux-device/runtime/gpio-stub/` に `cuse_gpio` の実装スパイクがあります。GPIO chip metadata と bridge 連携の検証用です。
 
-注意: Linux GPIO chardev の line request ioctl は呼び出し元プロセスに新しい fd を返すため、CUSE だけでは既存アプリの `gpio_shim.so` を完全透過に置き換えられません。詳細は `cuse-stubs/gpio-stub/README.md` を参照してください。
+注意: Linux GPIO chardev の line request ioctl は呼び出し元プロセスに新しい fd を返すため、CUSE だけでは既存アプリの `gpio_shim.so` を完全透過に置き換えられません。詳細は `targets/linux-device/runtime/gpio-stub/README.md` を参照してください。
 
 2026-06-02 時点の確認:
 

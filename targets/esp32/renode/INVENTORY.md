@@ -36,13 +36,13 @@ Status words:
 
 | Asset | Location | Decision | Notes |
 |---|---|---:|---|
-| ESP32 QEMU flash image merger | `firmware-runners/esp32/bin/gar-esp32-flash-image` | reuse | Good reference for artifact layout and offsets. |
-| ESP32 QEMU runner | `firmware-runners/esp32/bin/gar-esp32-qemu-run` | reuse | Keep as boot smoke-test oracle while Renode grows. |
+| ESP32 QEMU flash image merger | `targets/esp32/qemu/bin/gar-esp32-flash-image` | reuse | Good reference for artifact layout and offsets. |
+| ESP32 QEMU runner | `targets/esp32/qemu/bin/gar-esp32-qemu-run` | reuse | Keep as boot smoke-test oracle while Renode grows. |
 | M5Stack Renode sketch | `renode/m5stack-core2-sketch.repl` | write | Loadable contract sketch only; not a bootable ESP32 platform yet. |
 | M5Stack Renode script | `renode/run-m5stack-core2-sketch.resc` | write | Entry-point skeleton; loads the sketch and prints a notice. |
 | M5Status Tiny Renode smoke | `renode/m5status-tiny/` | reuse | Headless Xtensa firmware smoke target with Robot UART assertion. |
 | Vibe Remote virtual device | `gar-vibe-ui/vibe-remote/scripts/virtual-device.js` | reuse | Fast protocol-level fallback; does not execute firmware. |
-| Bluetooth SPP probe | `firmware-runners/esp32/bin/gar-spp-jsonl-probe` | reuse | Real-device transport probe; useful reference for JSON Lines framing. |
+| Bluetooth SPP probe | `targets/esp32/probes/spp-jsonl/bin/gar-spp-jsonl-probe` | reuse | Real-device transport probe; useful reference for JSON Lines framing. |
 
 ## Target Priority
 
@@ -191,7 +191,7 @@ Action:
 
 ```bash
 renode --console --disable-xwt --execute \
-  "include @firmware-runners/esp32/renode/run-m5stack-core2-sketch.resc; quit"
+  "include @targets/esp32/renode/run-m5stack-core2-sketch.resc; quit"
 ```
 
 Result:
@@ -225,9 +225,9 @@ Actions:
 
 ```bash
 renode --console --disable-xwt --execute \
-  "include @firmware-runners/esp32/renode/m5status-tiny/run.resc; start; quit"
+  "include @targets/esp32/renode/m5status-tiny/run.resc; start; quit"
 
-renode-test firmware-runners/esp32/renode/m5status-tiny/m5status-tiny.robot
+renode-test targets/esp32/renode/m5status-tiny/m5status-tiny.robot
 ```
 
 Results:

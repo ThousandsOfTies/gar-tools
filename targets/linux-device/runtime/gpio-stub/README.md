@@ -25,8 +25,8 @@ Use this as an ABI/bridge spike. A production replacement needs one of:
 Run:
 
 ```bash
-make -C cuse-stubs/gpio-stub
-sudo cuse-stubs/gpio-stub/cuse_gpio -f --devname=gpiochip0
+make -C targets/linux-device/runtime/gpio-stub
+sudo targets/linux-device/runtime/gpio-stub/cuse_gpio -f --devname=gpiochip0
 sudo chmod 666 /dev/gpiochip0
 ```
 

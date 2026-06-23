@@ -1,7 +1,7 @@
-# ESP32 firmware runner
+# ESP32 Target Tools
 
-This directory is the GAR-owned home for ESP32/M5StickC Plus2 firmware-level
-virtual targets.
+This directory is the GAR-owned home for tools that make ESP32/M5StickC Plus2
+usable as a GAR target.
 
 The long-term GAR direction is Renode: an AI-maintained virtual board with
 scriptable peripherals, analyzers, and CI tests. See
@@ -30,7 +30,7 @@ tree. It uses Renode's verified Xtensa sample-controller platform and upstream
 Zephyr hello-world ELF, then checks UART output with Robot Framework.
 
 ```bash
-renode-test firmware-runners/esp32/renode/m5status-tiny/m5status-tiny.robot
+renode-test targets/esp32/renode/m5status-tiny/m5status-tiny.robot
 ```
 
 This proves the GAR/Renode firmware-test loop: load ELF, start emulation, and
@@ -40,7 +40,7 @@ buttons, Wi-Fi, or Bluetooth.
 ## Build a flash image
 
 ```bash
-firmware-runners/esp32/bin/gar-esp32-flash-image \
+targets/esp32/qemu/bin/gar-esp32-flash-image \
   --artifact ~/Yurufuwa/gar-vibe-ui/vibe-remote/m5stack-client/artifacts/20260617-152624-m5stack-core2 \
   --output /tmp/gar-m5stack-flash.bin
 ```
@@ -57,7 +57,7 @@ Default offsets:
 ## Run with QEMU
 
 ```bash
-firmware-runners/esp32/bin/gar-esp32-qemu-run /tmp/gar-m5stack-flash.bin
+targets/esp32/qemu/bin/gar-esp32-qemu-run /tmp/gar-m5stack-flash.bin
 ```
 
 The runner expects `qemu-system-xtensa` on `PATH`. ESP-IDF can install
@@ -79,7 +79,7 @@ On Linux/WSL hosts, bind the paired device to an RFCOMM device first. The exact
 pairing flow is host-specific; after pairing, the smoke probe shape is:
 
 ```bash
-firmware-runners/esp32/bin/gar-spp-jsonl-probe \
+targets/esp32/probes/spp-jsonl/bin/gar-spp-jsonl-probe \
   /dev/rfcomm0 \
   --token YOUR_TOKEN \
   --status running
@@ -94,10 +94,12 @@ smoke test: it does not emulate Bluetooth radio behavior or boot firmware.
 | Layer | Location | Purpose |
 |---|---|---|
 | Protocol-level virtual device | `gar-vibe-ui/vibe-remote/scripts/virtual-device.js` | Fast Vibe Remote test double; does not boot firmware |
-| Bluetooth SPP probe | `firmware-runners/esp32/bin/gar-spp-jsonl-probe` | Real StickC Plus2-class device smoke test over OS serial/RFCOMM |
-| QEMU firmware runner | `firmware-runners/esp32/bin/` | Short-term ESP32 boot smoke test for built artifacts |
-| M5Status Tiny Renode smoke | `firmware-runners/esp32/renode/m5status-tiny/` | First headless Renode firmware execution + UART Robot test |
-| Renode virtual board | `firmware-runners/esp32/renode/` | Long-term GAR ideal: scriptable M5Stack board model |
+| Fake ESP-IDF / FreeRTOS link stubs | `targets/esp32/fake-idf/` | Minimal host-side headers and static library for apps to link before real simulation exists |
+| Bluetooth SPP probe | `targets/esp32/probes/spp-jsonl/bin/gar-spp-jsonl-probe` | Real StickC Plus2-class device smoke test over OS serial/RFCOMM |
+| QEMU firmware runner | `targets/esp32/qemu/bin/` | Short-term ESP32 boot smoke test for built artifacts |
+| Wokwi backend assets | `targets/esp32/wokwi/` | Placeholder for Wokwi templates, scenarios, and expected serial logs |
+| M5Status Tiny Renode smoke | `targets/esp32/renode/m5status-tiny/` | First headless Renode firmware execution + UART Robot test |
+| Renode virtual board | `targets/esp32/renode/` | Long-term GAR ideal: scriptable M5Stack board model |
 
 ## Scope
 

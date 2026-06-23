@@ -44,8 +44,8 @@ scriptable firmware execution that AI agents and CI can observe and drive.
 
 Status: done.
 
-- Keep Renode files under `gar-tools/firmware-runners/esp32/renode/`.
-- Keep QEMU tools under `gar-tools/firmware-runners/esp32/bin/` as a reference
+- Keep Renode files under `gar-tools/targets/esp32/renode/`.
+- Keep QEMU tools under `gar-tools/targets/esp32/qemu/bin/` as a reference
   runner and smoke-test path.
 - Document the difference between protocol-level virtual device, QEMU runner,
   and Renode virtual board.
