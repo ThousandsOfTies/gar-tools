@@ -1,0 +1,19 @@
+{
+  "id": "esp32",
+  "displayName": "ESP32 / M5Stack",
+  "description": "ESP32 firmware target using ESP-IDF/FreeRTOS surfaces and M5Stack-class device workflows.",
+  "toolsRoot": "targets/esp32",
+  "defaultBackends": {
+    "development": "github_codespaces",
+    "simulation": "wokwi",
+    "boot": "esp32_qemu_firmware",
+    "hostLink": "fake-idf",
+    "device": "esp32_serial",
+    "probe": "spp-jsonl"
+  },
+  "backendNotes": {
+    "simulation": "Wokwi is the primary visible simulation backend.",
+    "boot": "Espressif QEMU remains the firmware boot smoke backend.",
+    "hostLink": "fake-idf provides minimal link-time ESP-IDF/FreeRTOS stubs."
+  }
+}
