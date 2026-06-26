@@ -14,5 +14,6 @@ cuse-stubs/spi-stub/cuse_spi
 cuse-stubs/test/vl53l0x_read
 cuse-stubs/test/gpio_led_button
 
+.pio/
 __pycache__/
 *.pyc

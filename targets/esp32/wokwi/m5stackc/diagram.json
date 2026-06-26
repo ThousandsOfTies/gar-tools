@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "author": "Gapless Agent Runtime",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-esp32-devkit-v1",
+      "id": "esp",
+      "top": -35.0,
+      "left": -10.0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-ili9341",
+      "id": "lcd",
+      "top": -55.0,
+      "left": 290.0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btnA",
+      "top": 265.0,
+      "left": 300.0,
+      "attrs": {
+        "color": "red",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btnB",
+      "top": 265.0,
+      "left": 380.0,
+      "attrs": {
+        "color": "gray",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led",
+      "top": 265.0,
+      "left": 475.0,
+      "attrs": {
+        "color": "red"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r1",
+      "top": 302.0,
+      "left": 502.0,
+      "rotate": 0,
+      "attrs": {
+        "value": "1000"
+      }
+    },
+    {
+      "type": "wokwi-gnd",
+      "id": "gnd",
+      "top": 355.0,
+      "left": 370.0,
+      "attrs": {}
+    }
+  ],
+  "connections": [
+    [
+      "esp:TX0",
+      "$serialMonitor:RX",
+      "",
+      []
+    ],
+    [
+      "esp:RX0",
+      "$serialMonitor:TX",
+      "",
+      []
+    ],
+    [
+      "lcd:VCC",
+      "esp:3V3",
+      "red",
+      []
+    ],
+    [
+      "lcd:GND",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "lcd:SCK",
+      "esp:D13",
+      "green",
+      []
+    ],
+    [
+      "lcd:MOSI",
+      "esp:D15",
+      "green",
+      []
+    ],
+    [
+      "lcd:CS",
+      "esp:D5",
+      "green",
+      []
+    ],
+    [
+      "lcd:D/C",
+      "esp:D23",
+      "green",
+      []
+    ],
+    [
+      "lcd:RST",
+      "esp:D18",
+      "green",
+      []
+    ],
+    [
+      "btnA:1.l",
+      "esp:D32",
+      "green",
+      []
+    ],
+    [
+      "btnA:2.r",
+      "gnd:GND",
+      "black",
+      []
+    ],
+    [
+      "btnB:1.l",
+      "esp:D33",
+      "green",
+      []
+    ],
+    [
+      "btnB:2.r",
+      "gnd:GND",
+      "black",
+      []
+    ],
+    [
+      "led:A",
+      "r1:1",
+      "green",
+      []
+    ],
+    [
+      "r1:2",
+      "esp:D2",
+      "green",
+      []
+    ],
+    [
+      "led:C",
+      "gnd:GND",
+      "black",
+      []
+    ]
+  ],
+  "dependencies": {}
+}
