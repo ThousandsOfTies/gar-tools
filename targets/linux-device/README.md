@@ -11,5 +11,6 @@ run this runtime; the runtime itself is about Linux `/dev` compatibility:
 - `runtime/spi-stub/`: CUSE SPI device with MFRC-522 simulation
 - `runtime/web-bridge/`: HTTP bridge and panel for observing and driving state
 - `runtime/test/`: small Linux test applications
+- `hardware/`: default CSV hardware definition copied by `gar hw init`
 
 GAR orchestration and EC2 provisioning live in `GaplessAgentRuntime`.

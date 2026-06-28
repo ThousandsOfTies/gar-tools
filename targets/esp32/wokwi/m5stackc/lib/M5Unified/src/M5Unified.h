@@ -44,17 +44,19 @@ class DisplayShim {
   int16_t height() const { return LOGICAL_HEIGHT; }
 
   void setBrightness(uint8_t brightness) { brightness_ = brightness; }
-  void fillScreen(uint16_t color) { tft_.fillRect(VIEW_X, VIEW_Y, LOGICAL_WIDTH * SCALE, LOGICAL_HEIGHT * SCALE, color); }
+  void fillScreen(uint16_t color) {
+    tft_.fillRect(VIEW_X, VIEW_Y, scaleSize(LOGICAL_WIDTH), scaleSize(LOGICAL_HEIGHT), color);
+  }
   void setTextColor(uint16_t color, uint16_t background) { tft_.setTextColor(color, background); }
   void setTextSize(uint8_t size) {
     textSize_ = size;
-    tft_.setTextSize(size * SCALE);
+    tft_.setTextSize(size);
   }
   void setCursor(int16_t x, int16_t y) { tft_.setCursor(mapX(x), mapY(y)); }
   void fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) {
-    tft_.fillRect(mapX(x), mapY(y), w * SCALE, h * SCALE, color);
+    tft_.fillRect(mapX(x), mapY(y), scaleSpan(x, w), scaleSpan(y, h), color);
   }
-  void drawPixel(int16_t x, int16_t y, uint16_t color) { tft_.fillRect(mapX(x), mapY(y), SCALE, SCALE, color); }
+  void drawPixel(int16_t x, int16_t y, uint16_t color) { tft_.fillRect(mapX(x), mapY(y), 1, 1, color); }
   void drawFastHLine(int16_t x, int16_t y, int16_t w, uint16_t color) { fillRect(x, y, w, 1, color); }
   void drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color) { fillRect(x, y, 1, h, color); }
   void drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) {
@@ -64,13 +66,13 @@ class DisplayShim {
     drawFastVLine(x + w - 1, y, h, color);
   }
   void drawRoundRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t radius, uint16_t color) {
-    tft_.drawRoundRect(mapX(x), mapY(y), w * SCALE, h * SCALE, radius * SCALE, color);
+    tft_.drawRoundRect(mapX(x), mapY(y), scaleSpan(x, w), scaleSpan(y, h), scaleSize(radius), color);
   }
   void fillRoundRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t radius, uint16_t color) {
-    tft_.fillRoundRect(mapX(x), mapY(y), w * SCALE, h * SCALE, radius * SCALE, color);
+    tft_.fillRoundRect(mapX(x), mapY(y), scaleSpan(x, w), scaleSpan(y, h), scaleSize(radius), color);
   }
   void fillCircle(int16_t x, int16_t y, int16_t radius, uint16_t color) {
-    tft_.fillCircle(mapX(x), mapY(y), radius * SCALE, color);
+    tft_.fillCircle(mapX(x), mapY(y), scaleSize(radius), color);
   }
   void drawString(const String &text, int16_t x, int16_t y) {
     tft_.setCursor(mapX(x), mapY(y));
@@ -92,14 +94,21 @@ class DisplayShim {
   }
 
  private:
-  static constexpr int16_t LOGICAL_WIDTH = 160;
-  static constexpr int16_t LOGICAL_HEIGHT = 80;
-  static constexpr int16_t SCALE = 2;
-  static constexpr int16_t VIEW_X = 0;
-  static constexpr int16_t VIEW_Y = 40;
+  static constexpr int16_t LOGICAL_WIDTH = 135;
+  static constexpr int16_t LOGICAL_HEIGHT = 240;
+  static constexpr int16_t SCALE_NUM = 4;
+  static constexpr int16_t SCALE_DEN = 3;
+  static constexpr int16_t VIEW_X = 30;
+  static constexpr int16_t VIEW_Y = 0;
 
-  int16_t mapX(int16_t x) const { return VIEW_X + x * SCALE; }
-  int16_t mapY(int16_t y) const { return VIEW_Y + y * SCALE; }
+  int16_t atLeastOne(int16_t value) const { return value > 0 ? value : 1; }
+  int16_t scaleValue(int16_t value) const { return (value * SCALE_NUM) / SCALE_DEN; }
+  int16_t scaleSize(int16_t value) const { return atLeastOne((value * SCALE_NUM + SCALE_DEN - 1) / SCALE_DEN); }
+  int16_t scaleSpan(int16_t start, int16_t length) const {
+    return atLeastOne(scaleValue(start + length) - scaleValue(start));
+  }
+  int16_t mapX(int16_t x) const { return VIEW_X + scaleValue(x); }
+  int16_t mapY(int16_t y) const { return VIEW_Y + scaleValue(y); }
 
   Adafruit_ILI9341 tft_;
   uint8_t rotation_ = 1;

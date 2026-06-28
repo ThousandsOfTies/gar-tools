@@ -6,14 +6,10 @@
   "defaultBackends": {
     "development": "github_codespaces",
     "simulation": "wokwi",
-    "boot": "esp32_qemu_firmware",
-    "hostLink": "fake-idf",
-    "device": "esp32_serial",
-    "probe": "spp-jsonl"
+    "device": "esp32_serial"
   },
   "backendNotes": {
     "simulation": "Wokwi is the primary visible simulation backend.",
-    "boot": "Espressif QEMU remains the firmware boot smoke backend.",
-    "hostLink": "fake-idf provides minimal link-time ESP-IDF/FreeRTOS stubs."
+    "advanced": "QEMU, Renode, fake-idf, and probes are optional target tools, not default setup backends."
   }
 }

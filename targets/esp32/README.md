@@ -10,6 +10,10 @@ scriptable peripherals, analyzers, and CI tests. See
 The practical short-term path for `firmware.bin` smoke tests is Espressif QEMU,
 plus Bluetooth Classic SPP probes for M5StickC Plus2-class real hardware:
 
+These are optional target tools. The default GAR setup path for ESP32/M5Stack is
+Wokwi; QEMU, Renode, fake-idf, and probes should be pulled into the workflow only
+when a specific verification task needs them.
+
 1. Build or collect a flash bundle:
    - `bootloader.bin`
    - `partitions.bin`
