@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+runtime_root="$(cd "$script_dir/.." && pwd)"
+run_dir="${GAR_RUNTIME_DIR:-/tmp/gar-luckfox-runtime}"
+
+video_nr="${GAR_CAMERA_VIDEO_NR:-0}"
+video_dev="/dev/video${video_nr}"
+label="${GAR_CAMERA_LABEL:-gar-luckfox-cam}"
+width="${GAR_CAMERA_WIDTH:-1280}"
+height="${GAR_CAMERA_HEIGHT:-720}"
+fps="${GAR_CAMERA_FPS:-15}"
+source_file="${GAR_CAMERA_SOURCE:-}"
+
+mkdir -p "$run_dir"
+
+if ! command -v modprobe >/dev/null 2>&1; then
+  echo "modprobe not found"
+  exit 1
+fi
+
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  echo "ffmpeg not found"
+  exit 1
+fi
+
+if [[ ! -e "$video_dev" ]]; then
+  echo "[camera-start] loading v4l2loopback for $video_dev"
+  sudo modprobe v4l2loopback video_nr="$video_nr" card_label="$label" exclusive_caps=1 max_buffers=2
+fi
+
+if [[ ! -e "$video_dev" ]]; then
+  echo "failed to create $video_dev"
+  exit 1
+fi
+
+if [[ -f "$run_dir/camera_ffmpeg.pid" ]] && kill -0 "$(cat "$run_dir/camera_ffmpeg.pid")" 2>/dev/null; then
+  echo "[camera-start] feeder already running"
+  exit 0
+fi
+
+echo "[camera-start] device=$video_dev size=${width}x${height} fps=$fps"
+
+if [[ -n "$source_file" ]]; then
+  if [[ ! -f "$source_file" ]]; then
+    echo "camera source file not found: $source_file"
+    exit 1
+  fi
+  nohup ffmpeg -hide_banner -loglevel warning -re -stream_loop -1 \
+    -i "$source_file" \
+    -vf "fps=${fps},scale=${width}:${height},format=yuv420p" \
+    -f v4l2 "$video_dev" >"$run_dir/camera_ffmpeg.log" 2>&1 &
+else
+  nohup ffmpeg -hide_banner -loglevel warning -re \
+    -f lavfi -i "testsrc2=size=${width}x${height}:rate=${fps}" \
+    -pix_fmt yuv420p \
+    -f v4l2 "$video_dev" >"$run_dir/camera_ffmpeg.log" 2>&1 &
+fi
+
+echo $! >"$run_dir/camera_ffmpeg.pid"
+echo "[camera-start] feeder pid=$(cat "$run_dir/camera_ffmpeg.pid")"

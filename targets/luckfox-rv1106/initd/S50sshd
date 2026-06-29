@@ -1,0 +1,52 @@
+#!/bin/sh
+
+# BusyBox init script that starts whichever SSH daemon exists.
+
+start_dropbear() {
+  [ -x /usr/sbin/dropbear ] || return 1
+  pidof dropbear >/dev/null 2>&1 && return 0
+  /usr/sbin/dropbear -R -E
+}
+
+start_openssh() {
+  if [ -x /etc/init.d/sshd ]; then
+    /etc/init.d/sshd start
+    return $?
+  fi
+  [ -x /usr/sbin/sshd ] || return 1
+  pidof sshd >/dev/null 2>&1 && return 0
+  mkdir -p /var/run/sshd
+  /usr/sbin/sshd
+}
+
+stop_dropbear() {
+  pidof dropbear >/dev/null 2>&1 && killall dropbear
+}
+
+stop_openssh() {
+  if [ -x /etc/init.d/sshd ]; then
+    /etc/init.d/sshd stop
+    return
+  fi
+  pidof sshd >/dev/null 2>&1 && killall sshd
+}
+
+case "$1" in
+  start)
+    start_openssh || start_dropbear || true
+    ;;
+  stop)
+    stop_openssh
+    stop_dropbear
+    ;;
+  restart)
+    "$0" stop
+    "$0" start
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+    ;;
+esac
+
+exit 0

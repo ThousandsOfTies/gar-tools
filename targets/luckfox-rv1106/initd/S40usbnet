@@ -1,0 +1,32 @@
+#!/bin/sh
+
+# BusyBox init script for USB gadget network interface.
+# Override via environment in /etc/default/usbnet if present.
+
+USB_IFACE="${USB_IFACE:-usb0}"
+USB_ADDR="${USB_ADDR:-10.42.0.1/24}"
+
+[ -r /etc/default/usbnet ] && . /etc/default/usbnet
+
+case "$1" in
+  start)
+    ip link show "$USB_IFACE" >/dev/null 2>&1 || exit 0
+    ip link set "$USB_IFACE" up
+    ip addr show dev "$USB_IFACE" | grep -q "${USB_ADDR%/*}" || ip addr add "$USB_ADDR" dev "$USB_IFACE"
+    ;;
+  stop)
+    ip link show "$USB_IFACE" >/dev/null 2>&1 || exit 0
+    ip addr flush dev "$USB_IFACE"
+    ip link set "$USB_IFACE" down
+    ;;
+  restart)
+    "$0" stop
+    "$0" start
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+    ;;
+esac
+
+exit 0

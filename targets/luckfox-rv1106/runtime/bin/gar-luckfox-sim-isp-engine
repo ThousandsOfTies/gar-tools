@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import os
+import time
+from pathlib import Path
+
+
+def now_ts() -> int:
+    return int(time.time())
+
+
+def load_initial_state() -> dict:
+    return {
+        "BRIGHTNESS": 50,
+        "CONTRAST": 50,
+        "SATURATION": 50,
+        "SHARPNESS": 50,
+        "EXPOSURE_COMP": 0,
+        "FPS": 15,
+        "BITRATE": 1500,
+        "MODE": "NAV",
+        "FOCUS": "BRIGHTNESS",
+        "UPDATED_AT": now_ts(),
+    }
+
+
+def write_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+
+
+def append_jsonl(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+
+
+def apply_event(state: dict, event: dict) -> list[dict]:
+    emitted: list[dict] = []
+    e_type = str(event.get("type", ""))
+    item = str(event.get("item", ""))
+    value = event.get("value")
+    mode = str(event.get("mode", state.get("MODE", "NAV")))
+
+    state["MODE"] = mode
+    if item:
+        state["FOCUS"] = item
+    if item and isinstance(value, (int, float)) and item in state:
+        state[item] = int(value)
+    state["UPDATED_AT"] = now_ts()
+
+    # In simulation, treat both "change" and "commit" as virtual ISP apply points.
+    if e_type in {"change", "commit"} and item in {
+        "BRIGHTNESS",
+        "CONTRAST",
+        "SATURATION",
+        "SHARPNESS",
+        "EXPOSURE_COMP",
+        "FPS",
+        "BITRATE",
+    }:
+        emitted.append(
+            {
+                "ts": now_ts(),
+                "action": "apply",
+                "target": item,
+                "value": state[item],
+                "source": "rotary-sim",
+            }
+        )
+
+    return emitted
+
+
+def process_line(line: str, state: dict, state_file: Path, apply_log: Path, echo: bool) -> None:
+    line = line.strip()
+    if not line:
+        return
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError:
+        return
+
+    emits = apply_event(state, event)
+    write_json(state_file, state)
+    for payload in emits:
+        append_jsonl(apply_log, payload)
+        if echo:
+            print(
+                f"[isp-sim] apply {payload['target']}={payload['value']}"
+            )
+
+
+def replay_then_follow(
+    event_log: Path,
+    state: dict,
+    state_file: Path,
+    apply_log: Path,
+    follow: bool,
+    echo: bool,
+) -> None:
+    pos = 0
+
+    def replay_from_start() -> int:
+        if not event_log.exists():
+            return 0
+        local_pos = 0
+        with event_log.open("r", encoding="utf-8") as f:
+            for line in f:
+                local_pos = f.tell()
+                process_line(line, state, state_file, apply_log, echo)
+        return local_pos
+
+    pos = replay_from_start()
+
+    if not follow:
+        return
+
+    while True:
+        if not event_log.exists():
+            time.sleep(0.2)
+            continue
+        with event_log.open("r", encoding="utf-8") as f:
+            f.seek(pos)
+            while True:
+                line = f.readline()
+                if not line:
+                    pos = f.tell()
+                    break
+                pos = f.tell()
+                process_line(line, state, state_file, apply_log, echo)
+        time.sleep(0.2)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="GAR Luckfox simulated ISP engine")
+    parser.add_argument(
+        "--event-log",
+        default=os.environ.get("GAR_ROTARY_EVENT_LOG", "/tmp/gar-rotary-events.jsonl"),
+        help="rotary event log JSONL path",
+    )
+    parser.add_argument(
+        "--state-file",
+        default=os.environ.get("GAR_ISP_STATE_FILE", "/tmp/gar-isp-state.json"),
+        help="current ISP state JSON path",
+    )
+    parser.add_argument(
+        "--apply-log",
+        default=os.environ.get("GAR_ISP_APPLY_LOG", "/tmp/gar-isp-apply.jsonl"),
+        help="applied parameter JSONL path",
+    )
+    parser.add_argument("--follow", action="store_true", help="follow event log")
+    parser.add_argument("--echo", action="store_true", help="print apply events")
+    args = parser.parse_args()
+
+    event_log = Path(args.event_log)
+    state_file = Path(args.state_file)
+    apply_log = Path(args.apply_log)
+
+    state = load_initial_state()
+    write_json(state_file, state)
+
+    replay_then_follow(event_log, state, state_file, apply_log, args.follow, args.echo)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

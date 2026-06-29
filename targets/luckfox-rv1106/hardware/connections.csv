@@ -1,0 +1,11 @@
+source,source_pin,target,target_pin,signal,description
+luckfox_rv1106,MIPI_CSI0,sc3336_cam,MIPI_CSI,MIPI_CSI,Camera data link
+luckfox_rv1106,SPI0_MOSI,ili9341_lcd,SDI,SPI0,SPI data out to display
+luckfox_rv1106,SPI0_MISO,ili9341_lcd,SDO,SPI0,SPI data in from display
+luckfox_rv1106,SPI0_SCLK,ili9341_lcd,SCK,SPI0,SPI clock
+luckfox_rv1106,SPI0_CS0,ili9341_lcd,CS,SPI0_CS0,Display chip select
+luckfox_rv1106,GPIO_LCD_DC,ili9341_lcd,DC,GPIO,Display command/data select
+luckfox_rv1106,GPIO_LCD_RST,ili9341_lcd,RST,GPIO,Display reset
+luckfox_rv1106,GPIO_ENC_A,ky040_encoder,A,GPIO,Rotary phase A input
+luckfox_rv1106,GPIO_ENC_B,ky040_encoder,B,GPIO,Rotary phase B input
+luckfox_rv1106,GPIO_ENC_SW,ky040_encoder,SW,GPIO,Rotary push switch input

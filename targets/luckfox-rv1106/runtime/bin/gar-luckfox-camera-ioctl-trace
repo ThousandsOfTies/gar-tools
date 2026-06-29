@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -lt 1 ]]; then
+  echo "usage: $0 <app-binary> [args...]"
+  exit 1
+fi
+
+if ! command -v strace >/dev/null 2>&1; then
+  echo "strace not found"
+  exit 1
+fi
+
+app_bin="$1"
+shift
+
+if [[ ! -x "$app_bin" ]]; then
+  echo "app binary not executable: $app_bin"
+  exit 1
+fi
+
+trace_dev="${GAR_TRACE_DEV:-/dev/video0}"
+trace_tag="${GAR_TRACE_TAG:-real}"
+out_dir="${GAR_TRACE_OUT:-/tmp/gar-camera-trace-${trace_tag}-$(date +%Y%m%d-%H%M%S)}"
+duration="${GAR_TRACE_DURATION:-}"
+
+mkdir -p "$out_dir"
+
+trace_base="$out_dir/strace"
+summary_file="$out_dir/summary.txt"
+ioctl_file="$out_dir/ioctl_sequence.txt"
+
+echo "[trace] app=$app_bin"
+echo "[trace] dev=$trace_dev"
+echo "[trace] out=$out_dir"
+echo "[trace] tag=$trace_tag"
+
+if [[ -n "$duration" ]]; then
+  timeout "${duration}s" strace -ff -tt -yy -s 160 \
+    -o "$trace_base" \
+    -e trace=open,openat,close,ioctl,mmap,munmap,read,write,poll,select \
+    "$app_bin" "$@" || true
+else
+  strace -ff -tt -yy -s 160 \
+    -o "$trace_base" \
+    -e trace=open,openat,close,ioctl,mmap,munmap,read,write,poll,select \
+    "$app_bin" "$@" || true
+fi
+
+{
+  echo "GAR camera trace summary"
+  echo "tag: $trace_tag"
+  echo "device: $trace_dev"
+  echo "generated_at: $(date -Iseconds)"
+  echo
+  echo "trace_files:"
+  ls -1 "$out_dir"/strace* 2>/dev/null || true
+} >"$summary_file"
+
+grep -h "$trace_dev" "$out_dir"/strace* 2>/dev/null >"$out_dir/video0_lines.txt" || true
+
+grep -h -o 'VIDIOC_[A-Z0-9_]*' "$out_dir"/strace* 2>/dev/null \
+  | awk '{count[$1]++} END{for(k in count) printf "%s %d\n", k, count[k]}' \
+  | sort >"$out_dir/ioctl_counts.txt" || true
+
+grep -h -o 'VIDIOC_[A-Z0-9_]*' "$out_dir"/strace* 2>/dev/null >"$ioctl_file" || true
+
+{
+  echo
+  echo "artifacts:"
+  echo "  - $summary_file"
+  echo "  - $out_dir/video0_lines.txt"
+  echo "  - $out_dir/ioctl_counts.txt"
+  echo "  - $ioctl_file"
+} >>"$summary_file"
+
+echo "[trace] done"
+echo "[trace] summary: $summary_file"

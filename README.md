@@ -8,6 +8,10 @@ Gapless Agent Runtime のシミュレーション環境で使うツール群で�
   - `targets/linux-device/runtime/`: I2C/GPIO/SPI CUSE stubs、web-bridge、テストアプリ
 - `targets/esp32/`: ESP32/M5Stack firmware artifact を QEMU/Renode/BT SPP へ接続する足場
   - `targets/esp32/renode/m5status-tiny/`: Renode で動く最小 Xtensa firmware smoke test
+- `targets/luckfox-rv1106/`: Luckfox Pico Plus/Pro/Max (RV1106) 向けの target 雛形
+  - `targets/luckfox-rv1106/app-template/`: C/C++ アプリ骨組みと cross build 用 Makefile/CMake
+  - `targets/luckfox-rv1106/toolchain/`: Buildroot SDK toolchain 設定テンプレート
+  - `targets/luckfox-rv1106/hardware/`: SC3336 + ILI9341 + KY-040 の初期ハードウェア定義
 - `targets/*/target.json`: `gar setup` が読む target manifest。推奨 backend と tools root を宣言する。
 - `docs/`: シミュレーション設定と AI エージェント操作メモ
 

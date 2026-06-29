@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+runtime_root="$(cd "$script_dir/.." && pwd)"
+
+linux_runtime_root="${GAR_LINUX_RUNTIME_ROOT:-$runtime_root/../../linux-device/runtime}"
+run_dir="${GAR_RUNTIME_DIR:-/tmp/gar-luckfox-runtime}"
+sock_path="${GAR_HW_SIM_SOCK:-$run_dir/hw_sim.sock}"
+hardware_dir="${GAR_HARDWARE_DIR:-$runtime_root/../hardware}"
+
+i2c_dev="${GAR_LUCKFOX_I2C_DEV:-i2c-3}"
+spi_dev="${GAR_LUCKFOX_SPI_DEV:-spidev0.0}"
+
+bridge_py="${GAR_BRIDGE_PY:-$linux_runtime_root/web-bridge/bridge.py}"
+cuse_i2c_bin="${GAR_CUSE_I2C:-$linux_runtime_root/i2c-stub/cuse_i2c}"
+cuse_spi_bin="${GAR_CUSE_SPI:-$linux_runtime_root/spi-stub/cuse_spi}"
+
+if [[ ! -f "$bridge_py" ]]; then
+  echo "missing bridge.py: $bridge_py"
+  exit 1
+fi
+if [[ ! -x "$cuse_i2c_bin" ]]; then
+  echo "missing cuse_i2c binary: $cuse_i2c_bin"
+  echo "build hint: make -C $linux_runtime_root/i2c-stub"
+  exit 1
+fi
+if [[ ! -x "$cuse_spi_bin" ]]; then
+  echo "missing cuse_spi binary: $cuse_spi_bin"
+  echo "build hint: make -C $linux_runtime_root/spi-stub"
+  exit 1
+fi
+
+mkdir -p "$run_dir"
+rm -f "$sock_path"
+
+python_cmd="${GAR_BRIDGE_PYTHON:-python3}"
+
+echo "[devfs-start] run_dir=$run_dir"
+echo "[devfs-start] sock=$sock_path"
+echo "[devfs-start] i2c=$i2c_dev spi=$spi_dev"
+
+if [[ -f "$run_dir/bridge.pid" ]] && kill -0 "$(cat "$run_dir/bridge.pid")" 2>/dev/null; then
+  echo "[devfs-start] bridge already running"
+else
+  env GAR_RUNTIME_DIR="$run_dir" GAR_HW_SIM_SOCK="$sock_path" GAR_HARDWARE_DIR="$hardware_dir" \
+    nohup "$python_cmd" "$bridge_py" >"$run_dir/bridge.log" 2>&1 &
+  echo $! >"$run_dir/bridge.pid"
+fi
+
+if [[ -f "$run_dir/cuse_i2c.pid" ]] && kill -0 "$(cat "$run_dir/cuse_i2c.pid")" 2>/dev/null; then
+  echo "[devfs-start] cuse_i2c already running"
+else
+  env GAR_RUNTIME_DIR="$run_dir" GAR_HW_SIM_SOCK="$sock_path" GAR_HARDWARE_DIR="$hardware_dir" \
+    nohup "$cuse_i2c_bin" -f --devname="$i2c_dev" >"$run_dir/cuse_i2c.log" 2>&1 &
+  echo $! >"$run_dir/cuse_i2c.pid"
+fi
+
+if [[ -f "$run_dir/cuse_spi.pid" ]] && kill -0 "$(cat "$run_dir/cuse_spi.pid")" 2>/dev/null; then
+  echo "[devfs-start] cuse_spi already running"
+else
+  env GAR_RUNTIME_DIR="$run_dir" GAR_HW_SIM_SOCK="$sock_path" GAR_HARDWARE_DIR="$hardware_dir" \
+    nohup "$cuse_spi_bin" -f --devname="$spi_dev" >"$run_dir/cuse_spi.log" 2>&1 &
+  echo $! >"$run_dir/cuse_spi.pid"
+fi
+
+for n in $(seq 1 30); do
+  ok=1
+  [[ -e "/dev/$i2c_dev" ]] || ok=0
+  [[ -e "/dev/$spi_dev" ]] || ok=0
+  if [[ "$ok" == "1" ]]; then
+    chmod 666 "/dev/$i2c_dev" "/dev/$spi_dev" 2>/dev/null || true
+    echo "[devfs-start] ready: /dev/$i2c_dev /dev/$spi_dev"
+    exit 0
+  fi
+  sleep 0.1
+done
+
+echo "[devfs-start] warning: device nodes not ready yet"
+echo "[devfs-start] check logs under $run_dir"
+exit 1

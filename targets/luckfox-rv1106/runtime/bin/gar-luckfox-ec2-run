@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -lt 1 ]]; then
+  echo "usage: $0 <app-binary> [args...]"
+  exit 1
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+runtime_root="$(cd "$script_dir/.." && pwd)"
+
+app_bin="$1"
+shift
+
+if [[ ! -x "$app_bin" ]]; then
+  echo "app binary not executable: $app_bin"
+  exit 1
+fi
+
+required_nodes=(
+  "/dev/i2c-3"
+  "/dev/spidev0.0"
+)
+
+if [[ "${GAR_REQUIRE_VIDEO:-0}" == "1" ]]; then
+  required_nodes+=("/dev/video0")
+fi
+if [[ "${GAR_REQUIRE_FB:-0}" == "1" ]]; then
+  required_nodes+=("/dev/fb0")
+fi
+if [[ "${GAR_REQUIRE_GPIO:-0}" == "1" ]]; then
+  required_nodes+=("/dev/gpiochip0")
+fi
+
+missing=0
+for node in "${required_nodes[@]}"; do
+  if [[ ! -e "$node" ]]; then
+    echo "missing device node: $node"
+    missing=1
+  fi
+done
+
+if [[ "$missing" == "1" ]]; then
+  echo "start devfs runtime first: $runtime_root/bin/gar-luckfox-ec2-devfs-start"
+  exit 1
+fi
+
+echo "[ec2-run] using host /dev nodes (no LD_PRELOAD)"
+"$app_bin" "$@"

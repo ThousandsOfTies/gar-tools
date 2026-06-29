@@ -1,0 +1,6 @@
+component_id,name,kind,part_number,description
+luckfox_rv1106,Luckfox Pico Plus,board,RV1106,Primary embedded Linux target board
+sc3336_cam,Camera Module,ic,SC3336,3MP MIPI CSI camera sensor
+ili9341_lcd,LCD Module,ic,ILI9341,2.4-2.8 inch SPI TFT display
+ky040_encoder,Rotary Encoder,input,KY-040,Incremental rotary encoder with push switch
+eth_uplink,LAN Uplink,interface,RJ45,Wired network for SSH deploy and debug
