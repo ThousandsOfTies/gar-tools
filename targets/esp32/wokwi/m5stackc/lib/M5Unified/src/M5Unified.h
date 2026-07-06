@@ -16,6 +16,10 @@
 #define TFT_DARKGREY 0x7BEF
 #define TFT_LIGHTGREY 0xC618
 
+#ifndef VIBE_BATTERY_PERCENT
+#define VIBE_BATTERY_PERCENT 95
+#endif
+
 namespace gar_wokwi_m5 {
 
 constexpr int TFT_SCK_PIN = 13;
@@ -143,11 +147,26 @@ class ButtonShim {
   bool pressed_ = false;
 };
 
+class PowerShim {
+ public:
+  int32_t getBatteryLevel() const {
+    int32_t percent = VIBE_BATTERY_PERCENT;
+    if (percent < 0) {
+      return 0;
+    }
+    if (percent > 100) {
+      return 100;
+    }
+    return percent;
+  }
+};
+
 struct Config {};
 
 class M5UnifiedShim {
  public:
   DisplayShim Display;
+  PowerShim Power;
   ButtonShim BtnA{BUTTON_A_PIN};
   ButtonShim BtnB{BUTTON_B_PIN};
 

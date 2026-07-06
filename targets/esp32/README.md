@@ -45,8 +45,8 @@ buttons, Wi-Fi, or Bluetooth.
 
 ```bash
 targets/esp32/qemu/bin/gar-esp32-flash-image \
-  --artifact ~/Yurufuwa/gar-vibe-ui/vibe-remote/m5stack-client/artifacts/20260617-152624-m5stack-core2 \
-  --output /tmp/gar-m5stack-flash.bin
+  --artifact ~/Yurufuwa/gar-vibe-ui/vibe-remote/m5stickc-client/artifacts/20260620-070805-m5stickc-plus2-vibe-min \
+  --output /tmp/gar-m5stickc-flash.bin
 ```
 
 Default offsets:
@@ -61,7 +61,7 @@ Default offsets:
 ## Run with QEMU
 
 ```bash
-targets/esp32/qemu/bin/gar-esp32-qemu-run /tmp/gar-m5stack-flash.bin
+targets/esp32/qemu/bin/gar-esp32-qemu-run /tmp/gar-m5stickc-flash.bin
 ```
 
 The runner expects `qemu-system-xtensa` on `PATH`. ESP-IDF can install

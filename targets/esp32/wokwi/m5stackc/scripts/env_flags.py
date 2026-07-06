@@ -62,5 +62,9 @@ port = config_value(dotenv, "VIBE_REMOTE_PORT")
 if port is not None:
     defines.append(("VIBE_REMOTE_PORT", port))
 
+battery_percent = config_value(dotenv, "VIBE_BATTERY_PERCENT")
+if battery_percent is not None:
+    defines.append(("VIBE_BATTERY_PERCENT", battery_percent))
+
 if defines:
     env.Append(CPPDEFINES=defines)

@@ -62,7 +62,7 @@ Deferred target:
 
 ## Firmware Touch Surface
 
-Source inspected: `gar-vibe-ui/vibe-remote/m5stack-client/src/main.cpp`.
+Source inspected: `gar-vibe-ui/vibe-remote/m5stickc-client/src/main.cpp`.
 
 | Firmware dependency | Used for | Decision | First-pass approach |
 |---|---|---:|---|

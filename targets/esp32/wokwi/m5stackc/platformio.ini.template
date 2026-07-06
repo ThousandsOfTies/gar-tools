@@ -1,3 +1,7 @@
+[platformio]
+default_envs = m5stackc
+src_dir = {app_src}
+
 [env:m5stackc]
 platform = espressif32
 board = m5stick-c
