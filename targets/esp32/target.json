@@ -4,12 +4,12 @@
   "description": "ESP32 firmware target using ESP-IDF/FreeRTOS surfaces and M5Stack-class device workflows.",
   "toolsRoot": "targets/esp32",
   "defaultBackends": {
-    "development": "github_codespaces",
-    "simulation": "wokwi",
-    "device": "esp32_serial"
+    "codespace": "github_codespaces",
+    "simulator": "wokwi",
+    "target": "esp32_serial"
   },
   "backendNotes": {
-    "simulation": "Wokwi is the primary visible simulation backend.",
+    "simulator": "Wokwi is the primary visible simulation backend.",
     "advanced": "QEMU, Renode, fake-idf, and probes are optional target tools, not default setup backends."
   }
 }

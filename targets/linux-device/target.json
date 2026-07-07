@@ -4,12 +4,12 @@
   "description": "Linux /dev compatible target using gpio-sim, CUSE I2C/SPI, and web-bridge runtime.",
   "toolsRoot": "targets/linux-device",
   "defaultBackends": {
-    "development": "github_codespaces",
-    "simulation": "ssh_remote",
-    "device": "adb_usb"
+    "codespace": "github_codespaces",
+    "simulator": "ssh_remote",
+    "target": "adb_usb"
   },
   "backendNotes": {
-    "simulation": "EC2 Graviton is the primary simulation host for this target.",
+    "simulator": "EC2 Graviton is the primary simulation host for this target.",
     "runtime": "targets/linux-device/runtime"
   }
 }
