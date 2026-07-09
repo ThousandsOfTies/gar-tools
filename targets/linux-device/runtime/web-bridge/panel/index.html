@@ -118,6 +118,34 @@
     </div>
   </div>
 
+  <!-- KY-040 Rotary Encoder Section (gar-stream-rx) -->
+  <div class="section">
+    <div class="section-title">GPIO — KY-040 Rotary Encoder (gar-stream-rx)</div>
+    <div class="devices-row">
+      <div class="device-card">
+        <div class="device-label">Position</div>
+        <div class="rotary-counter" id="rotary-counter">0</div>
+        <div class="rotary-dial">
+          <button class="rotary-arrow" onclick="sendRotate(-1)">◀</button>
+          <button class="rotary-center" id="rotary-sw" onclick="sendRotaryPress()">●</button>
+          <button class="rotary-arrow" onclick="sendRotate(1)">▶</button>
+        </div>
+        <div class="device-sublabel">CCW · push (SW) · CW</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ILI9341 Section (gar-stream-rx) -->
+  <div class="section">
+    <div class="section-title">SPI — ILI9341 320×240 (gar-stream-rx video monitor)</div>
+    <div class="devices-row">
+      <div class="device-card">
+        <canvas id="ili9341-canvas" width="320" height="240"></canvas>
+        <div class="device-sublabel">ILI9341 (video_monitor.py)</div>
+      </div>
+    </div>
+  </div>
+
 </div>
 <script src="panel.js"></script>
 </body>

@@ -215,6 +215,70 @@ body {
   height: 240px;
 }
 
+/* Rotary encoder (gar-stream-rx KY-040) */
+.rotary-counter {
+  font-size: 2.4rem;
+  font-weight: bold;
+  color: #44ccff;
+  font-variant-numeric: tabular-nums;
+}
+.rotary-dial {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.rotary-arrow {
+  background: #1e1e3e;
+  color: #9090cc;
+  border: 2px solid #3a3a6a;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-family: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.05s;
+  box-shadow: 0 4px 0 #0a0a1a;
+}
+.rotary-arrow:active {
+  background: #2a2a5e;
+  border-color: #6060aa;
+  color: #c0c0ff;
+  box-shadow: 0 1px 0 #0a0a1a;
+  transform: translateY(3px);
+}
+.rotary-center {
+  background: #1e1e3e;
+  color: #9090cc;
+  border: 2px solid #3a3a6a;
+  border-radius: 50%;
+  width: 52px;
+  height: 52px;
+  font-size: 1.3rem;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.05s;
+  box-shadow: 0 4px 0 #0a0a1a;
+}
+.rotary-center:active, .rotary-center.pressed {
+  background: #2a2a5e;
+  border-color: #44ff88;
+  color: #44ff88;
+  box-shadow: 0 1px 0 #0a0a1a;
+  transform: translateY(3px);
+}
+
+/* ILI9341 (gar-stream-rx video monitor) */
+#ili9341-canvas {
+  image-rendering: pixelated;
+  border: 1px solid #1e1e44;
+  border-radius: 4px;
+  background: #000;
+  width: 320px;
+  height: 240px;
+}
+
 /* OLED */
 #oled-canvas {
   image-rendering: pixelated;

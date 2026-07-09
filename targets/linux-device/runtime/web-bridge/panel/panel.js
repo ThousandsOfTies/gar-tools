@@ -47,6 +47,15 @@ function handleMessage(msg) {
     case "oled":
       if (msg.framebuf) drawOled(msg.framebuf);
       break;
+    case "ili9341":
+      if (msg.pixels) drawIli9341(msg.pixels, msg.width, msg.height);
+      break;
+    case "rotary":
+      setRotaryCounter(msg.counter);
+      break;
+    case "rotary_button":
+      setRotarySwVisual(msg.value);
+      break;
   }
 }
 
@@ -63,6 +72,12 @@ function applyInitState(state) {
 
   const rfid = state?.spi?.mfrc522 ?? {};
   setRfid(rfid.uid, rfid.present);
+
+  const rotaryCounter = state?.gpio?.rotary?.counter ?? 0;
+  setRotaryCounter(rotaryCounter);
+
+  const ili = state?.spi?.ili9341 ?? {};
+  if (ili.pixels) drawIli9341(ili.pixels, ili.width ?? 320, ili.height ?? 240);
 }
 
 /* ---- LED ---- */
@@ -157,6 +172,47 @@ function drawLcd(pixelsB64) {
     imgData.data[i * 4 + 3] = 255;
   }
   ctx.putImageData(imgData, 0, 0);
+}
+
+/* ---- ILI9341 (gar-stream-rx, RGB565, size can change with MADCTL rotation) ---- */
+function drawIli9341(pixelsB64, width, height) {
+  const canvas = document.getElementById("ili9341-canvas");
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  const bytes = Uint8Array.from(atob(pixelsB64), c => c.charCodeAt(0));
+  const imgData = ctx.createImageData(width, height);
+  for (let i = 0; i < width * height; i++) {
+    const hi = bytes[i * 2];
+    const lo = bytes[i * 2 + 1];
+    const rgb565 = (hi << 8) | lo;
+    imgData.data[i * 4 + 0] = ((rgb565 >> 11) & 0x1F) << 3;
+    imgData.data[i * 4 + 1] = ((rgb565 >> 5)  & 0x3F) << 2;
+    imgData.data[i * 4 + 2] = ( rgb565        & 0x1F) << 3;
+    imgData.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+/* ---- KY-040 rotary encoder (gar-stream-rx) ---- */
+function setRotaryCounter(v) {
+  const el = document.getElementById("rotary-counter");
+  if (el) el.textContent = v;
+}
+
+function sendRotate(direction) {
+  send({ type: "rotary_rotate", direction });
+}
+
+function sendRotaryPress() {
+  send({ type: "rotary_press" });
+  setRotarySwVisual(true);
+  setTimeout(() => setRotarySwVisual(false), 150);
+}
+
+function setRotarySwVisual(pressed) {
+  const el = document.getElementById("rotary-sw");
+  if (el) el.classList.toggle("pressed", Boolean(pressed));
 }
 
 /* ---- helpers ---- */

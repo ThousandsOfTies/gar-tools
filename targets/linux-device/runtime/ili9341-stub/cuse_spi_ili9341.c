@@ -1,9 +1,9 @@
 /*
- * cuse_spi.c — CUSE-based SPI stub (/dev/spidev0.0)
+ * cuse_spi_ili9341.c — CUSE-based SPI stub for the ILI9341 panel (gar-stream-rx)
  *
  * Creates /dev/spidev0.0 (or the name given by --devname) as a userspace
- * character device and serves the spidev ioctl interface used by the
- * MFRC-522 RFID driver:
+ * character device and serves the spidev ioctl interface used by
+ * gar-stream-rx's ili9341.py:
  *
  *   SPI_IOC_RD/WR_MODE          – SPI mode (CPOL/CPHA)            (accepted)
  *   SPI_IOC_RD/WR_LSB_FIRST     – bit order                        (accepted)
@@ -12,10 +12,10 @@
  *   SPI_IOC_RD/WR_MODE32        – 32-bit mode                      (accepted)
  *   SPI_IOC_MESSAGE(N)          – full-duplex transfer array       (simulated)
  *
- * This replaces the LD_PRELOAD spi_shim: instead of intercepting ioctl()
- * inside the application, the kernel routes spidev ioctls to us through
- * /dev/fuse, so the unmodified ~/sensor_demo binary talks to a real device
- * node. The MFRC-522 register state machine lives in mfrc522_sim.c.
+ * This is the ioctl-plumbing twin of spi-stub/cuse_spi.c (same scaffolding),
+ * pointed at ili9341_sim.c instead of the MFRC-522 register model. Only one
+ * of the two SPI device sims should run at a time - they target different
+ * app scenarios sharing the same conventional /dev/spidev0.0 node name.
  *
  * ARM build from this subdirectory: make CC=aarch64-linux-gnu-gcc
  */
@@ -35,9 +35,9 @@
 #include <unistd.h>
 #include <stdint.h>
 
-#include "mfrc522_sim.h"
+#include "ili9341_sim.h"
 
-#define MAX_XFERS  64
+#define MAX_XFERS 64
 
 /* ------------------------------------------------------------------ */
 /* Device configuration (accepted from the driver, echoed back)        */
@@ -46,7 +46,7 @@
 static uint8_t  spi_mode  = 0;
 static uint8_t  spi_lsb   = 0;
 static uint8_t  spi_bits  = 8;
-static uint32_t spi_speed = 1000000;
+static uint32_t spi_speed = 10000000;
 static uint32_t spi_mode32 = 0;
 
 /* ------------------------------------------------------------------ */
@@ -158,7 +158,7 @@ static void handle_spi_message(fuse_req_t req, int cmd, void *arg,
     for (int i = 0; i < n; i++) {
         size_t len = tr[i].len;
         const uint8_t *tx = tr[i].tx_buf ? tx_cursor : NULL;
-        uint8_t rxbuf[260];
+        uint8_t rxbuf[4096];
         uint8_t *rx = NULL;
 
         if (tr[i].rx_buf) {
@@ -166,7 +166,7 @@ static void handle_spi_message(fuse_req_t req, int cmd, void *arg,
             if (!rx) { free(out); fuse_reply_err(req, ENOMEM); return; }
         }
 
-        mfrc522_sim_transfer(tx, rx, len);
+        ili9341_sim_transfer(tx, rx, len);
 
         if (tr[i].rx_buf && out) {
             memcpy(out + out_pos, rx, len);
@@ -226,7 +226,7 @@ static void spi_ioctl(fuse_req_t req, int cmd, void *arg,
         else         scalar_wr(req, arg, in_buf, in_bufsz, &spi_mode32, sizeof(spi_mode32));
         break;
     default:
-        fprintf(stderr, "[cuse_spi] unknown ioctl nr=%u\n", nr);
+        fprintf(stderr, "[cuse_spi_ili9341] unknown ioctl nr=%u\n", nr);
         fuse_reply_err(req, ENOTTY);
         break;
     }
@@ -248,6 +248,7 @@ static const struct cuse_lowlevel_ops spi_clops = {
 
 int main(int argc, char *argv[]) {
     const char *devname = "spidev0.0";
+    int dc_line = 16;
 
     char **fuse_argv = malloc((argc + 1) * sizeof(char *));
     if (!fuse_argv) return 1;
@@ -256,6 +257,8 @@ int main(int argc, char *argv[]) {
     for (int i = 1; i < argc; i++) {
         if (strncmp(argv[i], "--devname=", 10) == 0) {
             devname = argv[i] + 10;
+        } else if (strncmp(argv[i], "--dc-line=", 10) == 0) {
+            dc_line = atoi(argv[i] + 10);
         } else {
             fuse_argv[fuse_argc++] = argv[i];
         }
@@ -264,7 +267,8 @@ int main(int argc, char *argv[]) {
 
     struct fuse_args args = FUSE_ARGS_INIT(fuse_argc, fuse_argv);
 
-    mfrc522_sim_init();
+    ili9341_sim_set_dc_line(dc_line);
+    ili9341_sim_init();
 
     char dev_name_buf[64];
     snprintf(dev_name_buf, sizeof(dev_name_buf), "DEVNAME=%s", devname);
@@ -278,7 +282,7 @@ int main(int argc, char *argv[]) {
         .flags          = CUSE_UNRESTRICTED_IOCTL,
     };
 
-    fprintf(stderr, "[cuse_spi] starting /dev/%s stub\n", devname);
+    fprintf(stderr, "[cuse_spi_ili9341] starting /dev/%s stub (dc_line=%d)\n", devname, dc_line);
     int ret = cuse_lowlevel_main(args.argc, args.argv, &ci, &spi_clops, NULL);
     free(fuse_argv);
     return ret;

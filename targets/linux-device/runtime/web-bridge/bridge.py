@@ -4,9 +4,9 @@ bridge.py — Hardware simulator web bridge
 Unix socket ↔ WebSocket ↔ Browser HTML panel
 
 Devices:
-  GPIO : LED (output), Button (input)
+  GPIO : LED (output), Button (input), KY-040 rotary encoder (gar-stream-rx)
   I2C  : VL53L0X distance sensor
-  SPI  : MFRC-522 RFID reader, LCD HAT 240x240
+  SPI  : MFRC-522 RFID reader, LCD HAT 240x240, ILI9341 320x240 (gar-stream-rx)
 """
 
 import asyncio
@@ -35,8 +35,22 @@ WS_PORT    = 8765
 PANEL_DIR  = Path(__file__).parent / "panel"
 
 GPIO_SIM_ROOTS = tuple(Path("/sys/devices/platform").glob("gpio-sim.*/gpiochip*"))
+
+# embedded-poc-app sensor_demo scenario
 GPIO_SIM_INPUT_LINES = (17, 27)
 GPIO_SIM_OUTPUT_LINES = (18, 24)
+
+# gar-stream-rx scenario (Luckfox Lyra Plus video monitor). These gpio-sim
+# line numbers must match however the scenario's gpio-sim chip was created;
+# adjust here and in ili9341-stub's --dc-line if your setup differs.
+ROTARY_CLK_LINE = 5
+ROTARY_DT_LINE = 6
+ROTARY_SW_LINE = 13
+ILI9341_DC_LINE = 16
+ROTARY_STEP_DELAY_S = 0.02
+
+GPIO_SIM_INPUT_LINES += (ROTARY_CLK_LINE, ROTARY_DT_LINE, ROTARY_SW_LINE)
+GPIO_SIM_OUTPUT_LINES += (ILI9341_DC_LINE,)
 
 # ------------------------------------------------------------------ #
 # Shared state                                                         #
@@ -46,6 +60,7 @@ state = {
     "gpio": {
         "leds":    {18: False, 24: False},
         "buttons": {17: False, 27: False},
+        "rotary":  {"counter": 0},   # KY-040 (gar-stream-rx)
     },
     "i2c": {
         "vl53l0x": {"range_mm": 300, "status": 0x01},
@@ -54,6 +69,7 @@ state = {
     "spi": {
         "mfrc522": {"uid": None, "present": False},
         "lcd":     {"pixels": None},
+        "ili9341": {"pixels": None, "width": 320, "height": 240},  # gar-stream-rx
     },
 }
 
@@ -145,6 +161,49 @@ async def set_range(mm: int):
     state["i2c"]["vl53l0x"]["range_mm"] = mm
     await broadcast({"type": "range", "value": mm})
 
+
+async def rotary_step(direction: int):
+    """Emulate one KY-040 detent (gar-stream-rx). direction: >=0 is CW, <0 is CCW.
+
+    ky040.py only watches CLK edges and compares DT's level at that instant
+    (not a full Gray-code decode), so a clean detent needs DT to already be
+    at its "new" level for the second CLK edge - see the step ordering below.
+    Idle rest state for both lines is pulled high (matches a KY-040 with
+    external pull-ups, as the gar-stream-rx wiring notes recommend).
+    """
+    clk, dt = ROTARY_CLK_LINE, ROTARY_DT_LINE
+    if direction >= 0:
+        _gpio_sim_set_input(clk, False)
+        await asyncio.sleep(ROTARY_STEP_DELAY_S)
+        _gpio_sim_set_input(dt, False)
+        await asyncio.sleep(ROTARY_STEP_DELAY_S)
+        _gpio_sim_set_input(clk, True)
+        await asyncio.sleep(ROTARY_STEP_DELAY_S)
+        _gpio_sim_set_input(dt, True)
+    else:
+        _gpio_sim_set_input(dt, False)
+        await asyncio.sleep(ROTARY_STEP_DELAY_S)
+        _gpio_sim_set_input(clk, False)
+        await asyncio.sleep(ROTARY_STEP_DELAY_S)
+        _gpio_sim_set_input(dt, True)
+        await asyncio.sleep(ROTARY_STEP_DELAY_S)
+        _gpio_sim_set_input(clk, True)
+
+    state["gpio"]["rotary"]["counter"] += 1 if direction >= 0 else -1
+    await broadcast({"type": "rotary", "counter": state["gpio"]["rotary"]["counter"]})
+
+
+async def rotary_press():
+    """KY-040 SW is active-low (idle high, falling edge on press) - the
+    opposite polarity from the active-high buttons above, so this doesn't
+    reuse press_button()."""
+    line = ROTARY_SW_LINE
+    _gpio_sim_set_input(line, False)
+    await broadcast({"type": "rotary_button", "value": True})
+    await asyncio.sleep(0.15)
+    _gpio_sim_set_input(line, True)
+    await broadcast({"type": "rotary_button", "value": False})
+
 # ------------------------------------------------------------------ #
 # WebSocket handler (browser ↔ bridge)                                 #
 # ------------------------------------------------------------------ #
@@ -172,6 +231,13 @@ async def ws_handler(websocket):
             elif mtype == "range_set":
                 mm = int(msg.get("value", 300))
                 await set_range(mm)
+
+            elif mtype == "rotary_rotate":
+                direction = int(msg.get("direction", 1))
+                await rotary_step(direction)
+
+            elif mtype == "rotary_press":
+                await rotary_press()
 
     except websockets.ConnectionClosed:
         pass
@@ -215,9 +281,25 @@ def handle_stub_message(raw: str, loop) -> str | None:
         asyncio.run_coroutine_threadsafe(
             broadcast({"type": "oled", "framebuf": msg.get("framebuf")}), loop)
 
+    elif event == "set" and device == "ili9341":
+        width  = msg.get("width", 320)
+        height = msg.get("height", 240)
+        pixels = msg.get("pixels")
+        state["spi"]["ili9341"] = {"pixels": pixels, "width": width, "height": height}
+        asyncio.run_coroutine_threadsafe(
+            broadcast({"type": "ili9341", "pixels": pixels, "width": width, "height": height}),
+            loop)
+
     elif msg.get("req") == "get" and device == "gpio":
         line = msg.get("line")
         val  = int(state["gpio"]["buttons"].get(line, False))
+        return json.dumps({"value": val}) + "\n"
+
+    elif msg.get("req") == "get" and device == "gpio_out":
+        # Live re-read (not the cached/polled state) - used by cuse_spi_ili9341
+        # to sample the DC line synchronously before each SPI transfer.
+        line = msg.get("line")
+        val  = int(bool(_gpio_sim_value(line)))
         return json.dumps({"value": val}) + "\n"
 
     elif msg.get("req") == "get" and device == "rfid":
@@ -334,12 +416,30 @@ async def api_range(request):
     await set_range(mm)
     return web.json_response({"ok": True, "value": mm})
 
+
+async def api_rotary_rotate(request):
+    body = await request.json() if request.can_read_body else {}
+    data = _parse_json_or_query(request, body)
+    direction = int(data.get("direction", 1))
+    await rotary_step(direction)
+    return web.json_response({"ok": True, "direction": direction})
+
+
+async def api_rotary_press(request):
+    await rotary_press()
+    return web.json_response({"ok": True})
+
 # ------------------------------------------------------------------ #
 # Main                                                                  #
 # ------------------------------------------------------------------ #
 
 async def main():
     loop = asyncio.get_running_loop()
+
+    # KY-040 idles high (open switch, external pull-ups recommended by
+    # gar-stream-rx's wiring notes) - see rotary_step()/rotary_press().
+    for line in (ROTARY_CLK_LINE, ROTARY_DT_LINE, ROTARY_SW_LINE):
+        _gpio_sim_set_input(line, True)
 
     # Unix socket server in background thread
     threading.Thread(target=unix_server_thread, args=(loop,), daemon=True).start()
@@ -357,6 +457,8 @@ async def main():
     app.router.add_route("POST", "/api/rfid/tap", api_rfid_tap)
     app.router.add_route("POST", "/api/rfid/remove", api_rfid_remove)
     app.router.add_route("POST", "/api/range", api_range)
+    app.router.add_route("POST", "/api/rotary/rotate", api_rotary_rotate)
+    app.router.add_route("POST", "/api/rotary/press", api_rotary_press)
     app.router.add_route("GET", "/{path_info:.*}", http_handler)
     runner = web.AppRunner(app)
     await runner.setup()

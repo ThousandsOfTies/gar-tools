@@ -9,6 +9,9 @@ run this runtime; the runtime itself is about Linux `/dev` compatibility:
 - `runtime/gpio-stub/`: legacy CUSE GPIO spike and notes
 - `runtime/i2c-stub/`: CUSE I2C device with SSD1306 and VL53L0X simulation
 - `runtime/spi-stub/`: CUSE SPI device with MFRC-522 simulation
+- `runtime/ili9341-stub/`: CUSE SPI device with ILI9341 320x240 panel
+  simulation (gar-stream-rx video monitor); KY-040 rotary encoder support
+  lives in `web-bridge` only (gpio-sim direct, no CUSE binary needed)
 - `runtime/web-bridge/`: HTTP bridge and panel for observing and driving state
 - `runtime/test/`: small Linux test applications
 - `hardware/`: default CSV hardware definition copied by `gar hw init`
