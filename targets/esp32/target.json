@@ -4,7 +4,7 @@
   "description": "ESP32 firmware target using ESP-IDF/FreeRTOS surfaces and M5Stack-class device workflows.",
   "toolsRoot": "targets/esp32",
   "defaultBackends": {
-    "codespace": "github_codespaces",
+    "codespace": "local",
     "simulator": "wokwi",
     "target": "esp32_serial"
   },

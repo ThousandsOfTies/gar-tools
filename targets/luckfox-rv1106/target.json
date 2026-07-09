@@ -4,7 +4,7 @@
   "description": "Buildroot Linux target for Luckfox Pico Plus/Pro/Max with RKMedia camera pipeline and lightweight local UI control.",
   "toolsRoot": "targets/luckfox-rv1106",
   "defaultBackends": {
-    "codespace": "github_codespaces",
+    "codespace": "local",
     "simulator": "ssh_remote",
     "target": "adb_usb"
   },

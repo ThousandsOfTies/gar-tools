@@ -4,7 +4,7 @@
   "description": "Linux /dev compatible target using gpio-sim, CUSE I2C/SPI, and web-bridge runtime.",
   "toolsRoot": "targets/linux-device",
   "defaultBackends": {
-    "codespace": "github_codespaces",
+    "codespace": "local",
     "simulator": "ssh_remote",
     "target": "adb_usb"
   },
