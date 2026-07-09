@@ -16,8 +16,8 @@
 #define TFT_DARKGREY 0x7BEF
 #define TFT_LIGHTGREY 0xC618
 
-#ifndef VIBE_BATTERY_PERCENT
-#define VIBE_BATTERY_PERCENT 95
+#ifndef M5STICK_BATTERY_PERCENT
+#define M5STICK_BATTERY_PERCENT 95
 #endif
 
 namespace gar_wokwi_m5 {
@@ -153,7 +153,7 @@ class ButtonShim {
 class PowerShim {
  public:
   int32_t getBatteryLevel() const {
-    int32_t percent = VIBE_BATTERY_PERCENT;
+    int32_t percent = M5STICK_BATTERY_PERCENT;
     if (percent < 0) {
       return 0;
     }

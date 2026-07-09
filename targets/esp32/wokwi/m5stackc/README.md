@@ -13,26 +13,27 @@ Build:
 pio run
 ```
 
-The app source is not stored in this simulator template. GAR renders
-`platformio.ini.template` with `src_dir` pointing to the Vibe Remote app
-repository:
+The app source is not stored in this simulator template. The shared
+`scripts/prepare_workspace.py` renders `platformio.ini.template` with `src_dir`
+pointing to the selected M5Stick application repository:
 
 ```text
-gar-vibe-ui/vibe-remote/m5stickc-client/src
+<application>/m5stickc-client/src
 ```
 
 The app repository owns the firmware entry point at `src/main.cpp`. If your
-checkout lives elsewhere, set `GAR_VIBE_REMOTE_M5_SRC_DIR` before running
-`gar setup` or `gar sim env start`. The Wokwi workspace only swaps the linked
+checkout lives elsewhere, set `GAR_WOKWI_APP_SRC_DIR` before generating the
+workspace. The Wokwi workspace only swaps the linked
 library surface: real builds link the real M5Unified package, while Wokwi builds
 link `lib/M5Unified` from this template.
 
-Simulator settings can be placed in `.env.local`. The app reads battery level
-through `M5.Power.getBatteryLevel()`. In Wokwi, the local M5Unified shim returns
-the simulated value from `VIBE_BATTERY_PERCENT`:
+An application can provide an optional Wokwi PlatformIO overlay through
+`GAR_WOKWI_APP_CONFIG`. It holds application-specific libraries and build flags.
+The shared M5Unified shim supports a simulated battery level through
+`M5STICK_BATTERY_PERCENT`:
 
 ```dotenv
-VIBE_BATTERY_PERCENT=95
+M5STICK_BATTERY_PERCENT=95
 ```
 
 Run with Wokwi CLI:

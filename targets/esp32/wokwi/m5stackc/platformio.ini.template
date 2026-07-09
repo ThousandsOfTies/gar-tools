@@ -1,6 +1,7 @@
 [platformio]
 default_envs = m5stackc
 src_dir = {app_src}
+{app_config}
 
 [env:m5stackc]
 platform = espressif32
@@ -10,10 +11,5 @@ monitor_speed = 115200
 extra_scripts = pre:scripts/env_flags.py
 lib_deps =
   adafruit/Adafruit ILI9341
-  links2004/WebSockets @ ^2.6.1
-  bblanchon/ArduinoJson @ ^7.2.0
-
-build_flags =
-  -D VIBE_WOKWI=1
-  -D VIBE_DEVICE_NAME=\"Wokwi-Vibe-Remote\"
-  -D VIBE_SERVICE_TYPE=\"vibe-remote\"
+  adafruit/Adafruit GFX Library
+  adafruit/Adafruit BusIO
