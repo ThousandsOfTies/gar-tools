@@ -5,11 +5,27 @@
   "toolsRoot": "targets/linux-device",
   "defaultBackends": {
     "codespace": "local",
-    "simulator": "ssh_remote",
+    "simulator": "local_docker",
     "target": "adb_usb"
   },
   "backendNotes": {
-    "simulator": "EC2 Graviton is the primary simulation host for this target.",
+    "simulator": "Local Docker is the default simulation host. GPIO uses the host kernel gpio-sim, so Linux 5.17 or newer is required. EC2 Graviton remains available through ssh_remote.",
     "runtime": "targets/linux-device/runtime"
+  },
+  "simulation": {
+    "docker": {
+      "image": "gar-linux-device:latest",
+      "buildContext": "targets/linux-device",
+      "bridgePort": 8080,
+      "init": ["/sbin/init"],
+      "privileged": true,
+      "hostCgroups": true,
+      "tmpfs": ["/run", "/run/lock"],
+      "mounts": [
+        "/sys/fs/cgroup:/sys/fs/cgroup:rw",
+        "/sys/kernel/config:/sys/kernel/config"
+      ],
+      "devices": ["/dev/fuse", "/dev/cuse"]
+    }
   }
 }

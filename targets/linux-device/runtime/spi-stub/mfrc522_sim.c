@@ -7,7 +7,7 @@
  * via mfrc522_sim_transfer().
  *
  * Card-present state is read from the web bridge socket so the HTML panel /
- * `gar sim ui rfid tap` can trigger taps.
+ * `gar sim io set --device rfid --uid <UID>` can trigger taps.
  */
 
 #include "mfrc522_sim.h"

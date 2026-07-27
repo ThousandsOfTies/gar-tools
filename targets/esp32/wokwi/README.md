@@ -26,7 +26,7 @@ run with `wokwi-cli`.
 ## M5StackC Template
 
 `m5stackc/` is copied into `GaplessAgentRuntime/.gar/wokwi/m5stackc` by
-`gar setup` / `gar sim env start`.
+`gar setup` / `gar sim runtime start`.
 
 It contains:
 

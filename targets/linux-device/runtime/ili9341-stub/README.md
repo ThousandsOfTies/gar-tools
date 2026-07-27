@@ -83,4 +83,4 @@ sudo ./cuse_spi_ili9341 -f --devname=spidev0.0 --dc-line=16
 2. `video_monitor.py`（LD_PRELOAD なし）が初期化シーケンスを流せてエラーにならない
 3. カラーバー分岐を表示させた状態で Virtual Hardware Panel の ILI9341 canvas に
    映像が表示される
-4. `gar sim ui` 側から回転を送っても（`ky040` 側の変更）表示は壊れない
+4. `gar sim io` 側から回転を送っても（`ky040` 側の変更）表示は壊れない

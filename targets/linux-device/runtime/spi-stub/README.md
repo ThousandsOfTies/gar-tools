@@ -6,7 +6,7 @@ LD_PRELOAD の `spi_shim.so` を置き換える、CUSE ベースの SPI スタ�
 
 `i2c-stub/cuse_i2c`（I2C）と同じ構造で、デバイス固有のレジスタ模擬は
 `mfrc522_sim.c` に分離しています。カード提示状態は web bridge
-（`GAR_HW_SIM_SOCK` または `GAR_RUNTIME_DIR/hw_sim.sock`）から取得するので、`gar sim ui rfid tap <UID>` でタップを
+（`GAR_HW_SIM_SOCK` または `GAR_RUNTIME_DIR/hw_sim.sock`）から取得するので、`gar sim io set --device rfid --uid <UID>` でタップを
 注入できます。
 
 ## なぜ CUSE か（spi_shim との違い）

@@ -4,7 +4,7 @@ This directory is the source template for the generated Wokwi workspace at
 `GaplessAgentRuntime/.gar/wokwi/m5stackc`.
 
 When the Wokwi simulation backend is selected, `gar setup` or
-`gar sim env start` copies this template, renders the `*.template` files, and
+`gar sim runtime start` copies this template, renders the `*.template` files, and
 points the generated `platformio.ini` at the application repository.
 
 Build:

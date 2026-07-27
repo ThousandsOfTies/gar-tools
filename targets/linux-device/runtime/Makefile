@@ -1,6 +1,10 @@
 # Linux device runtime simulation tools build
 
+# gar sim runtime build が simulation host のアーキテクチャに応じて CC を渡す。
+# CC は make の組込み変数なので ?= ではなく origin で判定する。
+ifeq ($(origin CC),default)
 CC = aarch64-linux-gnu-gcc
+endif
 
 SUBDIRS = gpio-stub spi-stub i2c-stub ili9341-stub test
 
