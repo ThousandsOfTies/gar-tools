@@ -36,7 +36,7 @@ PANEL_DIR  = Path(__file__).parent / "panel"
 
 GPIO_SIM_ROOTS = tuple(Path("/sys/devices/platform").glob("gpio-sim.*/gpiochip*"))
 
-# embedded-poc-app sensor_demo scenario
+# gar-adhoc-app sensor_demo scenario
 GPIO_SIM_INPUT_LINES = (17, 27)
 GPIO_SIM_OUTPUT_LINES = (18, 24)
 

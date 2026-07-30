@@ -7,7 +7,7 @@ ILI9341 パネルへ描画できるようにするスタブです。`spi-stub/cu
 だけを `ili9341_sim.c` に分離しています。
 
 同じ `/dev/spidev0.0` という慣習的なノード名を使いますが、対象アプリ
-シナリオが異なる（`spi-stub` は embedded-poc-app の sensor_demo、
+シナリオが異なる（`spi-stub` は gar-adhoc-app の sensor_demo、
 こちらは gar-stream-rx）ため、**同時に2つを起動する想定はありません**。
 どちらか一方だけを、そのシナリオに合わせて起動してください。
 
