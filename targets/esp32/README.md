@@ -8,7 +8,7 @@ scriptable peripherals, analyzers, and CI tests. See
 [`renode/ROADMAP.md`](renode/ROADMAP.md).
 
 The practical short-term path for `firmware.bin` smoke tests is Espressif QEMU,
-plus Bluetooth Classic SPP probes for M5StickC Plus2-class real hardware:
+plus Bluetooth Classic SPP probes for M5StickC Plus2-class real hardware.
 
 These are optional target tools. The default GAR setup path for ESP32/M5Stack is
 Wokwi; QEMU, Renode, fake-idf, and probes should be pulled into the workflow only
@@ -34,19 +34,36 @@ tree. It uses Renode's verified Xtensa sample-controller platform and upstream
 Zephyr hello-world ELF, then checks UART output with Robot Framework.
 
 ```bash
-renode-test targets/esp32/renode/m5status-tiny/m5status-tiny.robot
+python3 targets/esp32/renode/m5status-tiny/run.py --test
 ```
 
-This proves the GAR/Renode firmware-test loop: load ELF, start emulation, and
-wait for UART output. It does not yet prove ESP32 LX6, Arduino, M5Unified, LCD,
-buttons, Wi-Fi, or Bluetooth.
+The runner verifies its pinned ELF checksum before starting Renode. This proves
+the GAR/Renode firmware-test loop: load ELF, start emulation, and wait for UART
+output. It does not yet prove ESP32 LX6, Arduino, M5Unified, LCD, buttons, Wi-Fi,
+or Bluetooth.
 
-## Build a flash image
+## Build and deploy a target artifact
+
+The normal physical-device path uses the selected product build hook and the
+`esp32_esptool` target backend:
 
 ```bash
+gar target build
+gar target deploy
+```
+
+GAR stores the resulting immutable artifact snapshot under its `.gar/artifacts`
+directory and verifies the ESP32 flash bundle before writing it. The lower-level
+QEMU helper can consume the same four-file artifact directory for an optional
+boot smoke test.
+
+## Build a QEMU flash image manually
+
+```bash
+FLASH_IMAGE="$(mktemp)"
 targets/esp32/qemu/bin/gar-esp32-flash-image \
-  --artifact ~/Yurufuwa/gar-vibe-ui/vibe-remote/m5stickc-client/artifacts/20260620-070805-m5stickc-plus2-vibe-min \
-  --output /tmp/gar-m5stickc-flash.bin
+  --artifact path/to/esp32-artifact \
+  --output "$FLASH_IMAGE"
 ```
 
 Default offsets:
@@ -61,7 +78,7 @@ Default offsets:
 ## Run with QEMU
 
 ```bash
-targets/esp32/qemu/bin/gar-esp32-qemu-run /tmp/gar-m5stickc-flash.bin
+targets/esp32/qemu/bin/gar-esp32-qemu-run "$FLASH_IMAGE"
 ```
 
 The runner expects `qemu-system-xtensa` on `PATH`. ESP-IDF can install
@@ -97,11 +114,11 @@ smoke test: it does not emulate Bluetooth radio behavior or boot firmware.
 
 | Layer | Location | Purpose |
 |---|---|---|
-| Protocol-level virtual device | `gar-vibe-ui/vibe-remote/scripts/virtual-device.js` | Fast Vibe Remote test double; does not boot firmware |
+| Protocol-level virtual device | selected product workspace | Fast protocol test double; does not boot firmware |
 | Fake ESP-IDF / FreeRTOS link stubs | `targets/esp32/fake-idf/` | Minimal host-side headers and static library for apps to link before real simulation exists |
 | Bluetooth SPP probe | `targets/esp32/probes/spp-jsonl/bin/gar-spp-jsonl-probe` | Real StickC Plus2-class device smoke test over OS serial/RFCOMM |
 | QEMU firmware runner | `targets/esp32/qemu/bin/` | Short-term ESP32 boot smoke test for built artifacts |
-| Wokwi backend assets | `targets/esp32/wokwi/` | Placeholder for Wokwi templates, scenarios, and expected serial logs |
+| Wokwi backend assets | `targets/esp32/wokwi/` | Runnable workspace template, wiring, and M5Unified compatibility shim |
 | M5Status Tiny Renode smoke | `targets/esp32/renode/m5status-tiny/` | First headless Renode firmware execution + UART Robot test |
 | Renode virtual board | `targets/esp32/renode/` | Long-term GAR ideal: scriptable M5Stack board model |
 

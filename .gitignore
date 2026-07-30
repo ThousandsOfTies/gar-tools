@@ -14,7 +14,24 @@ targets/linux-device/runtime/spi-stub/cuse_spi
 targets/linux-device/runtime/ili9341-stub/cuse_spi_ili9341
 targets/linux-device/runtime/test/vl53l0x_read
 targets/linux-device/runtime/test/gpio_led_button
+**/build/
+*.so
+/artifacts/
 
+# Local environment files
+.env
+.env.*
+!.env.example
+!.env.*.example
+env.local
+**/env.local
+
+# Python and test caches
 .pio/
+.venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/

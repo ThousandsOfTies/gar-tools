@@ -77,7 +77,9 @@ def main() -> int:
                 f"{filename} at 0x{offset:x} exceeds flash size {args.flash_size} bytes"
             )
         image[offset:end] = data
-        print(f"placed {filename:14} at 0x{offset:05x}..0x{end:05x} ({len(data)} bytes)")
+        print(
+            f"placed {filename:14} at 0x{offset:05x}..0x{end:05x} ({len(data)} bytes)"
+        )
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(image)
@@ -87,4 +89,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

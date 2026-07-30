@@ -1,4 +1,6 @@
-const WS_URL = `ws://${location.hostname}:8765`;
+const WS_PROTOCOL = location.protocol === "https:" ? "wss:" : "ws:";
+const WS_URL = `${WS_PROTOCOL}//${location.host}/ws`;
+const RANGE_MAX_MM = 4000;
 
 let ws = null;
 let reconnectTimer = null;
@@ -28,6 +30,9 @@ function handleMessage(msg) {
   switch (msg.type) {
     case "init":
       applyInitState(msg.state);
+      break;
+    case "error":
+      console.warn(`Bridge rejected a panel action: ${msg.error}`);
       break;
     case "led":
       setLed(msg.line, msg.value);
@@ -60,6 +65,8 @@ function handleMessage(msg) {
 }
 
 function applyInitState(state) {
+  applyHardwareConfiguration(state?.hardware ?? {});
+
   const leds = state?.gpio?.leds ?? {};
   for (const [line, val] of Object.entries(leds)) setLed(Number(line), val);
 
@@ -70,14 +77,83 @@ function applyInitState(state) {
   setRange(range);
   document.getElementById("range-slider").value = range;
 
+  const oled = state?.i2c?.ssd1306 ?? {};
+  if (oled.framebuf) drawOled(oled.framebuf);
+
   const rfid = state?.spi?.mfrc522 ?? {};
   setRfid(rfid.uid, rfid.present);
+
+  const lcd = state?.spi?.lcd ?? {};
+  if (lcd.pixels) drawLcd(lcd.pixels);
 
   const rotaryCounter = state?.gpio?.rotary?.counter ?? 0;
   setRotaryCounter(rotaryCounter);
 
   const ili = state?.spi?.ili9341 ?? {};
   if (ili.pixels) drawIli9341(ili.pixels, ili.width ?? 320, ili.height ?? 240);
+}
+
+function applyHardwareConfiguration(hardware) {
+  const gpio = hardware?.gpio ?? {};
+  renderGpioControls(gpio.leds ?? [], gpio.buttons ?? []);
+
+  const devices = new Set(hardware?.devices ?? []);
+  for (const section of document.querySelectorAll("[data-device]")) {
+    section.hidden = !devices.has(section.dataset.device);
+  }
+
+  const rotarySection = document.querySelector("[data-feature='rotary']");
+  if (rotarySection) rotarySection.hidden = !gpio.rotary;
+}
+
+function renderGpioControls(leds, buttons) {
+  const container = document.getElementById("gpio-devices");
+  container.replaceChildren();
+
+  for (const definition of leds) {
+    const card = document.createElement("div");
+    card.className = "device-card";
+
+    const label = document.createElement("div");
+    label.className = "device-label";
+    label.textContent = `${definition.name} — GPIO${definition.line}`;
+
+    const indicator = document.createElement("div");
+    indicator.className = "led-indicator";
+    indicator.id = `led-${definition.line}`;
+
+    const value = document.createElement("div");
+    value.className = "device-sublabel";
+    value.id = `led-${definition.line}-val`;
+    value.textContent = "OFF";
+
+    card.append(label, indicator, value);
+    container.append(card);
+  }
+
+  for (const definition of buttons) {
+    const card = document.createElement("div");
+    card.className = "device-card";
+
+    const label = document.createElement("div");
+    label.className = "device-label";
+    label.textContent = `${definition.name} — GPIO${definition.line}`;
+
+    const button = document.createElement("button");
+    button.className = "hw-button";
+    button.id = `btn-${definition.line}`;
+    button.textContent = "PUSH";
+    button.addEventListener("pointerdown", (event) => {
+      button.setPointerCapture(event.pointerId);
+      sendButton(definition.line, true);
+    });
+    const release = () => sendButton(definition.line, false);
+    button.addEventListener("pointerup", release);
+    button.addEventListener("pointercancel", release);
+
+    card.append(label, button);
+    container.append(card);
+  }
 }
 
 /* ---- LED ---- */
@@ -106,7 +182,7 @@ function setRange(mm) {
   const el  = document.getElementById("range-value");
   const bar = document.getElementById("range-bar");
   if (el)  el.textContent = v;
-  if (bar) bar.style.width = `${Math.min(100, (v / 2000) * 100).toFixed(1)}%`;
+  if (bar) bar.style.width = `${Math.min(100, (v / RANGE_MAX_MM) * 100).toFixed(1)}%`;
 }
 
 function sendRange(value) {

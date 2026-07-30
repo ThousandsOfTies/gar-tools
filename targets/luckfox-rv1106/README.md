@@ -14,7 +14,7 @@ Setup guides:
 - `docs/06_ROTARY_ISP_RASPI_VIEW.md`: rotary ISP + local mini UI + RasPi remote view implementation guide.
 - `docs/07_SIM_FIRST_ROTARY_UI.md`: simulator-first rotary UI with \u25c0 \u25cf \u25b6 controls.
 - `docs/08_SIM_MONITOR_OUTPUT.md`: simulator-first monitor output dummy.
-- `runtime/README.md`: EC2 low-layer substitution strategy and launcher usage.
+- `runtime/README.md`: remote Linux low-layer substitution and launcher usage.
 
 Focus:
 
@@ -28,7 +28,9 @@ Simulation policy:
 
 - EC2 Graviton over `ssh_remote` is the default simulation model (aligned with Linux/RasPi-compatible target workflow).
 - For Linux `/dev` surface simulation on EC2, use device-file substitution (CUSE/gpio-sim) with runtime assets under `targets/linux-device/runtime`.
-- Standard Luckfox EC2 flow uses devfs replacement scripts under `runtime/bin/` (no `LD_PRELOAD` in normal path).
+- Standard Luckfox EC2 flow uses the GAR-generated systemd runtime. The scripts
+  under `runtime/bin/` are direct diagnostics for runtime development, not the
+  normal orchestration path.
 - GAR primary simulation strategy is AI-driven system substitution with CUSE/gpio-sim, not HAL replacement.
 - Camera simulation target is CUSE-based `/dev/video0`; `v4l2loopback` remains transitional fallback.
 - Hardware-specific camera ISP/encoder behavior (RKMedia/MPP/rkaiq) must be validated on real Luckfox hardware.
@@ -39,7 +41,7 @@ Simulation policy:
 - `hardware/`: default hardware CSV template used by `gar hw init`.
 - `app-template/`: lightweight C/C++ project skeleton for cross build.
 - `toolchain/`: CMake toolchain template for Buildroot SDK.
-- `scripts/`: helper scripts (deploy/start stubs).
+- `scripts/`: direct SSH/USB-network helpers for target bring-up and diagnostics.
 
 Simulator-first control loop entrypoint:
 
@@ -60,7 +62,33 @@ Simulator-first control loop entrypoint:
 4. Rotary encoder and keys
    - `libgpiod` for line event handling and debounced edge processing.
 
-## First-step proposal: cross compile environment definition
+## GAR workflow
+
+The manifest selects `ssh_scp` for a real Luckfox target and `ssh_remote` for
+its Linux simulation host. From the `GaplessAgentRuntime` root, use the common
+artifact flow:
+
+```bash
+scripts/gar setup
+scripts/gar hw init --dir path/to/product/hardware
+
+# simulation
+scripts/gar sim host start
+scripts/gar sim runtime build
+scripts/gar sim runtime deploy
+scripts/gar sim runtime start
+scripts/gar sim runtime diag --json
+
+# physical target
+scripts/gar target build
+scripts/gar target deploy
+```
+
+The selected product workspace owns the build hooks and artifact manifest.
+`gar-tools` provides the target definition, hardware template, runtime, and the
+following standalone application scaffold.
+
+## Develop the standalone cross-build scaffold
 
 Set these environment variables before build:
 
@@ -69,15 +97,16 @@ Set these environment variables before build:
 - `RV1106_TRIPLE`: compiler triple prefix (example: `arm-linux-gnueabihf`).
 - `LUCKFOX_HOST`: target host (USB default example: `root@10.42.0.1`).
 
-Then run:
+Then run from the `gar-tools` repository root:
 
 ```bash
-cd targets/luckfox-rv1106/app-template
-make
-make deploy
+make -C targets/luckfox-rv1106/app-template
+make -C targets/luckfox-rv1106/app-template deploy
 ```
 
-`make deploy` copies the built binary to `/opt/gar/bin` on the target.
+The standalone `deploy` target copies the built binary to the configured
+`LUCKFOX_DEPLOY_DIR` on the target. Normal GAR operation should use
+`gar target build/deploy` instead.
 
 For no-Ethernet operation, install the sample init scripts in `initd/` to bring up
 usb0 and SSH automatically at boot.

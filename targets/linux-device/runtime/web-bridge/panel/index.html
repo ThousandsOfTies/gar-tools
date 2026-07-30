@@ -16,47 +16,11 @@
   <!-- GPIO Section -->
   <div class="section">
     <div class="section-title">GPIO</div>
-    <div class="devices-row">
-
-      <!-- LED 18 -->
-      <div class="device-card">
-        <div class="device-label">LED GPIO18</div>
-        <div class="led-indicator" id="led-18"></div>
-        <div class="device-sublabel" id="led-18-val">OFF</div>
-      </div>
-
-      <!-- LED 24 -->
-      <div class="device-card">
-        <div class="device-label">LED GPIO24</div>
-        <div class="led-indicator" id="led-24"></div>
-        <div class="device-sublabel" id="led-24-val">OFF</div>
-      </div>
-
-      <!-- Button 17 -->
-      <div class="device-card">
-        <div class="device-label">BTN GPIO17</div>
-        <button class="hw-button" id="btn-17"
-                onmousedown="sendButton(17,1)"
-                onmouseup="sendButton(17,0)"
-                ontouchstart="sendButton(17,1)"
-                ontouchend="sendButton(17,0)">PUSH</button>
-      </div>
-
-      <!-- Button 27 -->
-      <div class="device-card">
-        <div class="device-label">BTN GPIO27</div>
-        <button class="hw-button" id="btn-27"
-                onmousedown="sendButton(27,1)"
-                onmouseup="sendButton(27,0)"
-                ontouchstart="sendButton(27,1)"
-                ontouchend="sendButton(27,0)">PUSH</button>
-      </div>
-
-    </div>
+    <div class="devices-row" id="gpio-devices"></div>
   </div>
 
   <!-- VL53L0X Section -->
-  <div class="section">
+  <div class="section" data-device="vl53l0x">
     <div class="section-title">I2C — VL53L0X (ToF Distance)</div>
     <div class="devices-row">
       <div class="device-card wide">
@@ -70,9 +34,9 @@
         </div>
         <div class="range-controls">
           <span class="range-label">0mm</span>
-          <input type="range" min="0" max="2000" value="300" id="range-slider"
+          <input type="range" min="0" max="4000" value="300" id="range-slider"
                  oninput="sendRange(this.value)">
-          <span class="range-label">2000mm</span>
+          <span class="range-label">4000mm</span>
         </div>
         <div class="device-sublabel">← drag to simulate distance</div>
       </div>
@@ -80,7 +44,7 @@
   </div>
 
   <!-- MFRC-522 Section -->
-  <div class="section">
+  <div class="section" data-device="mfrc522">
     <div class="section-title">SPI — MFRC-522 (RFID)</div>
     <div class="devices-row">
       <div class="device-card wide">
@@ -97,7 +61,7 @@
   </div>
 
   <!-- OLED Section -->
-  <div class="section">
+  <div class="section" data-device="ssd1306">
     <div class="section-title">I2C — SSD1306 OLED 128×64</div>
     <div class="devices-row">
       <div class="device-card">
@@ -108,7 +72,7 @@
   </div>
 
   <!-- LCD HAT Section -->
-  <div class="section">
+  <div class="section" data-device="st7789">
     <div class="section-title">SPI — LCD HAT 240×240</div>
     <div class="devices-row">
       <div class="device-card">
@@ -119,7 +83,7 @@
   </div>
 
   <!-- KY-040 Rotary Encoder Section (gar-stream-rx) -->
-  <div class="section">
+  <div class="section" data-feature="rotary">
     <div class="section-title">GPIO — KY-040 Rotary Encoder (gar-stream-rx)</div>
     <div class="devices-row">
       <div class="device-card">
@@ -136,7 +100,7 @@
   </div>
 
   <!-- ILI9341 Section (gar-stream-rx) -->
-  <div class="section">
+  <div class="section" data-device="ili9341">
     <div class="section-title">SPI — ILI9341 320×240 (gar-stream-rx video monitor)</div>
     <div class="devices-row">
       <div class="device-card">

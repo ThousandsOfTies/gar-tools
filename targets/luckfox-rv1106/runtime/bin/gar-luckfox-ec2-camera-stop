@@ -2,10 +2,19 @@
 set -euo pipefail
 
 run_dir="${GAR_RUNTIME_DIR:-/tmp/gar-luckfox-runtime}"
+video_dev="/dev/video${GAR_CAMERA_VIDEO_NR:-0}"
 
 if [[ -f "$run_dir/camera_ffmpeg.pid" ]]; then
-  pid="$(cat "$run_dir/camera_ffmpeg.pid")"
-  if kill -0 "$pid" 2>/dev/null; then
+  read -r pid <"$run_dir/camera_ffmpeg.pid"
+  if [[ ! "$pid" =~ ^[1-9][0-9]*$ ]]; then
+    echo "[camera-stop] ignoring invalid feeder PID"
+  elif kill -0 "$pid" 2>/dev/null; then
+    command_line="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
+    if [[ "$command_line" != *ffmpeg* || "$command_line" != *"$video_dev"* ]]; then
+      echo "[camera-stop] refusing to signal reused PID $pid"
+      rm -f "$run_dir/camera_ffmpeg.pid"
+      exit 1
+    fi
     kill "$pid" || true
     echo "[camera-stop] stopped feeder pid=$pid"
   fi

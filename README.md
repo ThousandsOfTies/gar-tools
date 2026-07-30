@@ -1,39 +1,70 @@
 # gar-tools
 
-Gapless Agent Runtime のシミュレーション環境で使うツール群です。
+Gapless Agent Runtime（GAR）が利用する、target固有の定義とsimulation
+runtimeをまとめたリポジトリです。通常の操作入口はこのリポジトリ内の個別
+scriptではなく、`GaplessAgentRuntime`の`gar` CLIです。
 
 主な内容:
 
-- `targets/linux-device/`: Linux `/dev` 互換 runtime（EC2 Graviton などで利用）
-  - `targets/linux-device/runtime/`: I2C/GPIO/SPI CUSE stubs、web-bridge、テストアプリ
-- `targets/esp32/`: ESP32/M5Stack firmware artifact を QEMU/Renode/BT SPP へ接続する足場
-  - `targets/esp32/renode/m5status-tiny/`: Renode で動く最小 Xtensa firmware smoke test
-- `targets/luckfox-rv1106/`: Luckfox Pico Plus/Pro/Max (RV1106) 向けの target 雛形
-  - `targets/luckfox-rv1106/app-template/`: C/C++ アプリ骨組みと cross build 用 Makefile/CMake
-  - `targets/luckfox-rv1106/toolchain/`: Buildroot SDK toolchain 設定テンプレート
-  - `targets/luckfox-rv1106/hardware/`: SC3336 + ILI9341 + KY-040 の初期ハードウェア定義
-- `targets/*/target.json`: `gar setup` が読む target manifest。推奨 backend と tools root を宣言する。
-- `docs/`: シミュレーション設定と AI エージェント操作メモ
+- `targets/linux-device/`: Linux `/dev`互換runtimeとlocal Docker環境
+- `targets/esp32/`: ESP32/M5Stack向けWokwi、QEMU、Renode、実機probe
+- `targets/luckfox-rv1106/`: Luckfox Pico Plus/Pro/Max向けhardware定義、
+  application雛形、simulation helper
+- `targets/*/target.json`: `gar setup`が検証・選択するtarget manifest
+- `docs/`: simulation設定とAI agent向けの補足資料
 
-## Build
+各targetの`hardware/*.csv`はhardware定義のテンプレートです。product固有の
+定義は`gar hw init`でworkspaceへ展開してから編集します。
+
+## GARから使う
+
+`GaplessAgentRuntime`のrootでtargetとenvironmentを選択した後、用途ごとの
+commandを実行します。
+
+```bash
+scripts/gar setup
+scripts/gar hw init --dir path/to/product/hardware
+
+# Linux simulationの代表的な流れ
+scripts/gar sim host start
+scripts/gar sim runtime build
+scripts/gar sim runtime deploy
+scripts/gar sim runtime start
+scripts/gar sim runtime diag --json
+```
+
+application artifactは`gar sim app build/deploy`、実機用artifactは
+`gar target build/deploy`で扱います。workspaceを複数登録している場合は
+各commandへ`--workspace NAME`を指定します。
+
+## runtimeを個別に開発する
+
+Linux runtimeだけを手元で変更・確認するときは、リポジトリrootのMakefileを
+直接利用できます。
 
 ```bash
 make
+make check
 make clean
 ```
 
-Codespace build VM では ARM64 向けにビルドします。EC2 への転送、simulation runtime 操作、Virtual Hardware 操作は WSL hub 側の Gapless Agent Runtime から行います。
+`make`は通常のLinux runtimeだけをbuildし、既定のcross compilerは
+`aarch64-linux-gnu-gcc`です。local host向けには`make linux-runtime CC=gcc`を
+使います。sample applicationは`make examples`、GPIO CUSEなどの実験実装は
+`make experiments`へ分離されており、通常buildには含まれません。
+`make check`には、siblingの`GaplessAgentRuntime`（別の場所にある場合は
+`GAR_RUNTIME_ROOT`で指定）、Node.js、host C compilerが必要です。
+
+GAR経由のbuildでは、選択したsimulation environmentに応じて`CC`と
+`GAR_SIM_ARCH`が設定されます。
 
 ## GPIO CUSE spike
 
-`targets/linux-device/runtime/gpio-stub/` に `cuse_gpio` の実装スパイクがあります。GPIO chip metadata と bridge 連携の検証用です。
+`targets/linux-device/runtime/gpio-stub/`の`cuse_gpio`は、GPIO chip metadataと
+bridge連携を確認するために残している実験実装です。
 
-注意: Linux GPIO chardev の line request ioctl は呼び出し元プロセスに新しい fd を返すため、CUSE だけでは既存アプリの `gpio_shim.so` を完全透過に置き換えられません。詳細は `targets/linux-device/runtime/gpio-stub/README.md` を参照してください。
-
-2026-06-02 時点の確認:
-
-- Codespace build VM で `aarch64-linux-gnu-gcc` による ARM64 ビルドが通る。
-- EC2 Graviton に `/home/ubuntu/cuse_gpio` としてデプロイ済み。
-- EC2 では既存の `/dev/gpiochip0` が存在するため、衝突回避名 `/dev/gar-gpiochip0` で CUSE 起動を確認。
-- `GPIO_GET_CHIPINFO_IOCTL` は `name=gpiochip0_sim`, `label=gar CUSE GPIO`, `lines=54` を返す。
-- LED/Button の bridge 連携と line request fd 問題は未解決。
+Linux GPIO chardevのline request ioctlは呼び出し元processへ新しいfdを返します。
+CUSE daemonだけではそのfdを別processへ渡せないため、既存applicationに対する
+完全透過なGPIO実装にはなりません。現在のsimulation runtimeではkernel-backedな
+`gpio-sim`を利用します。詳細は`targets/linux-device/runtime/gpio-stub/README.md`
+を参照してください。

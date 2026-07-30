@@ -1,2 +1,2 @@
 name,bus,chip_select,dev,mode,max_speed_hz,driver,sim,description
-ili9341_lcd,0,0,/dev/spidev0.0,0,40000000,ili9341,,SPI-connected ILI9341 display
+ili9341_lcd,0,0,/dev/spidev0.0,0,40000000,ili9341,ili9341,SPI-connected ILI9341 display

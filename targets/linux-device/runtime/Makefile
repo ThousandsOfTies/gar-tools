@@ -1,25 +1,34 @@
 # Linux device runtime simulation tools build
 
-# gar sim runtime build が simulation host のアーキテクチャに応じて CC を渡す。
-# CC は make の組込み変数なので ?= ではなく origin で判定する。
+# gar sim runtime build passes CC for the selected simulation host. Keep the
+# direct-invocation default compatible with the EC2 Graviton runtime.
 ifeq ($(origin CC),default)
 CC = aarch64-linux-gnu-gcc
 endif
 
-SUBDIRS = gpio-stub spi-stub i2c-stub ili9341-stub test
+HOSTCC ?= cc
 
-.PHONY: all clean $(SUBDIRS)
+.PHONY: all runtime examples experiments check clean
 
-all:
-	$(MAKE) -C gpio-stub     CC=$(CC)
+all: runtime
+
+runtime:
 	$(MAKE) -C spi-stub      CC=$(CC)
 	$(MAKE) -C i2c-stub      CC=$(CC)
 	$(MAKE) -C ili9341-stub  CC=$(CC)
+
+examples:
 	$(MAKE) -C test          CC=$(CC)
 
+experiments:
+	$(MAKE) -C gpio-stub     CC=$(CC)
+
+check:
+	$(MAKE) -C i2c-stub check HOSTCC=$(HOSTCC)
+
 clean:
-	$(MAKE) -C gpio-stub     clean
 	$(MAKE) -C spi-stub      clean
 	$(MAKE) -C i2c-stub      clean
 	$(MAKE) -C ili9341-stub  clean
+	$(MAKE) -C gpio-stub     clean
 	$(MAKE) -C test          clean

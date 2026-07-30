@@ -12,4 +12,4 @@ machine LoadPlatformDescription $ORIGIN/m5stack-core2-sketch.repl
 # showAnalyzer uart0
 # start
 
-echo "M5Stack Core2 Renode platform is a skeleton. See renode/ROADMAP.md for the path to a bootable GAR virtual board."
+echo "M5Stack Core2 Renode platform is a skeleton. See targets/esp32/renode/ROADMAP.md for the path to a bootable GAR virtual board."

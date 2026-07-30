@@ -23,13 +23,20 @@ GAR orchestration and EC2 provisioning live in `GaplessAgentRuntime`.
 
 ```bash
 gar sim host start --workspace <name>
+gar sim runtime build --workspace <name>
+gar sim runtime deploy --workspace <name>
+gar sim runtime start --workspace <name>
+gar sim runtime diag --workspace <name> --json
 ```
 
 `target.json` declares the image, its build context, and the devices and mounts
 the container needs (`/dev/cuse`, `/sys/kernel/config`, ...), so `gar` builds the
-image on first start and holds no linux-device specific knowledge itself. Build
-it manually with `docker build -t gar-linux-device:latest targets/linux-device`
-when you want to iterate on the `Dockerfile`.
+image before it creates the container and holds no linux-device specific
+knowledge itself. Unchanged inputs reuse Docker's build cache. The
+Dockerfile pins the Ubuntu 24.04 multi-platform image digest so amd64 and arm64
+builds use a reviewed base. Build it manually with
+`docker build -t gar-linux-device:latest targets/linux-device` only when you
+want to iterate on the container itself.
 
 The container shares the host kernel. `gpio-sim` therefore requires a host
 kernel of Linux 5.17 or newer with `CONFIG_GPIO_SIM`; WSL2 and Ubuntu 24.04 or

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
-Import("env")
+# PlatformIO/SCons overwrites this placeholder through Import when loading the script.
+env: Any = None
+Import("env")  # noqa: F821
 
 PROJECT_DIR = Path(env.subst("$PROJECT_DIR"))
 ENV_FILE = PROJECT_DIR / ".env.local"

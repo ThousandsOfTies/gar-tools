@@ -1,17 +1,28 @@
 # GAR Wokwi M5StackC Template
 
-This directory is the source template for the generated Wokwi workspace at
-`GaplessAgentRuntime/.gar/wokwi/m5stackc`.
+This directory is the source template for an M5StackC Wokwi build workspace.
 
-When the Wokwi simulation backend is selected, `gar setup` or
-`gar sim runtime start` copies this template, renders the `*.template` files, and
-points the generated `platformio.ini` at the application repository.
+The product's `scripts/product-sim-build.sh` invokes
+`scripts/prepare_workspace.py`, builds the firmware, and packages a GAR
+simulation-app artifact. `gar sim app deploy` materializes the runnable files
+from that artifact into the selected runtime workspace. `gar setup` only
+selects and installs Wokwi, while `gar sim runtime start` only launches the
+deployed project.
 
-Build:
+For direct template development, run the product-owned Make target and choose a
+generated workspace outside the application source and this template:
 
 ```bash
-pio run
+cd /path/to/product/m5stickc-client
+make wokwi-build \
+  GAR_TOOLS_ROOT=/path/to/gar-tools \
+  WOKWI_WORKSPACE=/tmp/gar-wokwi-m5stackc
 ```
+
+The workspace must be empty on its first generation. Subsequent updates require
+its `.gar-generated` marker. Generated files are refreshed while build output
+such as `.pio/` is preserved. The application source directory, template, and
+generated workspace must not overlap.
 
 The app source is not stored in this simulator template. The shared
 `scripts/prepare_workspace.py` renders `platformio.ini.template` with `src_dir`
@@ -43,11 +54,17 @@ export WOKWI_CLI_TOKEN=...
 wokwi-cli .
 ```
 
-Run the button smoke scenario:
+The shared template currently provides no Wokwi CLI scenario. Automated
+scenarios are product behavior and must be supplied and packaged by the product
+that owns them.
 
-```bash
-wokwi-cli . --scenario button.test.yaml --timeout 60000 --timeout-exit-code 1
-```
+The workspace generator uses these variables:
 
-Override paths with `GAR_WOKWI_PROJECT_DIR`, `GAR_WOKWI_TEMPLATE_DIR`,
+- Required when calling the generator directly: `GAR_WOKWI_PROJECT_DIR` and
+  `GAR_WOKWI_APP_SRC_DIR`.
+- Optional: `GAR_WOKWI_TEMPLATE_DIR` and `GAR_WOKWI_APP_CONFIG`.
+- `GAR_WOKWI_FIRMWARE` and `GAR_WOKWI_ELF` override the paths rendered into
+  `wokwi.toml`.
+
+At runtime, GaplessAgentRuntime reads `GAR_WOKWI_PROJECT_DIR`,
 `GAR_WOKWI_FIRMWARE`, `GAR_WOKWI_ELF`, and `GAR_WOKWI_TIMEOUT_MS`.

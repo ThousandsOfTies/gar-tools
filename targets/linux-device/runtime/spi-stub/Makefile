@@ -5,10 +5,11 @@ LDFLAGS  = -lfuse3 -lpthread
 # ARM build from this subdirectory: make CC=aarch64-linux-gnu-gcc
 
 SRCS = cuse_spi.c mfrc522_sim.c
+HEADERS = mfrc522_sim.h
 BIN  = cuse_spi
 
-$(BIN): $(SRCS)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+$(BIN): $(SRCS) $(HEADERS)
+	$(CC) $(CFLAGS) -o $@ $(SRCS) $(LDFLAGS)
 
 clean:
 	rm -f $(BIN)

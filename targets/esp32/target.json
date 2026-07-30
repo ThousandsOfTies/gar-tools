@@ -6,7 +6,7 @@
   "defaultBackends": {
     "codespace": "local",
     "simulator": "wokwi",
-    "target": "esp32_serial"
+    "target": "esp32_esptool"
   },
   "backendNotes": {
     "simulator": "Wokwi is the primary visible simulation backend.",

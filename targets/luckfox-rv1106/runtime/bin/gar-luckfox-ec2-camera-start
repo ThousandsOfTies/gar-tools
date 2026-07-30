@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-runtime_root="$(cd "$script_dir/.." && pwd)"
 run_dir="${GAR_RUNTIME_DIR:-/tmp/gar-luckfox-runtime}"
 
 video_nr="${GAR_CAMERA_VIDEO_NR:-0}"
@@ -14,6 +12,19 @@ fps="${GAR_CAMERA_FPS:-15}"
 source_file="${GAR_CAMERA_SOURCE:-}"
 
 mkdir -p "$run_dir"
+
+camera_feeder_running() {
+  local pidfile="$run_dir/camera_ffmpeg.pid"
+  local pid
+  local command_line
+
+  [[ -f "$pidfile" ]] || return 1
+  read -r pid <"$pidfile"
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  command_line="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
+  [[ "$command_line" == *ffmpeg* && "$command_line" == *"$video_dev"* ]]
+}
 
 if ! command -v modprobe >/dev/null 2>&1; then
   echo "modprobe not found"
@@ -35,10 +46,11 @@ if [[ ! -e "$video_dev" ]]; then
   exit 1
 fi
 
-if [[ -f "$run_dir/camera_ffmpeg.pid" ]] && kill -0 "$(cat "$run_dir/camera_ffmpeg.pid")" 2>/dev/null; then
+if camera_feeder_running; then
   echo "[camera-start] feeder already running"
   exit 0
 fi
+rm -f "$run_dir/camera_ffmpeg.pid"
 
 echo "[camera-start] device=$video_dev size=${width}x${height} fps=$fps"
 
@@ -58,5 +70,17 @@ else
     -f v4l2 "$video_dev" >"$run_dir/camera_ffmpeg.log" 2>&1 &
 fi
 
-echo $! >"$run_dir/camera_ffmpeg.pid"
-echo "[camera-start] feeder pid=$(cat "$run_dir/camera_ffmpeg.pid")"
+feeder_pid=$!
+echo "$feeder_pid" >"$run_dir/camera_ffmpeg.pid"
+
+for _ in $(seq 1 10); do
+  if camera_feeder_running; then
+    echo "[camera-start] feeder pid=$feeder_pid"
+    exit 0
+  fi
+  sleep 0.1
+done
+
+echo "[camera-start] feeder failed; see $run_dir/camera_ffmpeg.log"
+rm -f "$run_dir/camera_ffmpeg.pid"
+exit 1

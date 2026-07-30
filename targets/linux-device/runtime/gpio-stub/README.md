@@ -22,7 +22,16 @@ Use this as an ABI/bridge spike. A production replacement needs one of:
 - keeping an `LD_PRELOAD`/seccomp-style fd mediation layer for the fd-returning
   request ioctl only.
 
-Run:
+For the supported GPIO simulation path, let GAR inspect and start `gpio-sim`:
+
+```bash
+gar sim gpio check --json
+gar sim gpio plan --json
+gar sim runtime start
+gar sim runtime diag --json
+```
+
+Run this CUSE spike directly only when investigating its ABI behavior:
 
 ```bash
 make -C targets/linux-device/runtime/gpio-stub
@@ -30,15 +39,9 @@ sudo targets/linux-device/runtime/gpio-stub/cuse_gpio -f --devname=gpiochip0
 sudo chmod 666 /dev/gpiochip0
 ```
 
-## Current verification
+## What the spike proves
 
-Verified on 2026-06-02:
-
-- Built in Codespace with `aarch64-linux-gnu-gcc`.
-- Deployed to EC2 Graviton as `/home/ubuntu/cuse_gpio`.
-- EC2 already exposes a real `/dev/gpiochip0` (`ARMH0061:00`), so the spike was
-  run as `/dev/gar-gpiochip0` to avoid collision.
-- `GPIO_GET_CHIPINFO_IOCTL` succeeds and returns:
+The spike can create a CUSE node and answer `GPIO_GET_CHIPINFO_IOCTL` with:
 
 ```text
 name= gpiochip0_sim
@@ -46,58 +49,7 @@ label= gar CUSE GPIO
 lines= 54
 ```
 
-The spike now proves that the CUSE node can be created and can answer a basic
-GPIO ioctl. It does not yet prove LED/Button bridge behavior, and it still does
-not solve the line-request fd handoff limitation described above.
-
-## Next steps for the agent (run on EC2)
-
-This `cuse_gpio` spike is a **dead end for transparent GPIO** (CUSE cannot hand a
-line-request fd to the caller — see "Important limitation"). Do **not** invest
-more in making it transparent. Instead, evaluate the kernel-backed `gpio-sim`
-path, which is the preferred candidate (the GPIO `gpio-sim` migration has since
-been completed).
-
-Run these on EC2 Graviton (this dev box has no EC2 access; the agent on EC2 does):
-
-1. Check whether the running kernel provides `gpio-sim`:
-
-   ```bash
-   modinfo gpio-sim 2>/dev/null && echo "MODULE_OK" || echo "NO_MODULE"
-   zcat /proc/config.gz 2>/dev/null | grep -i gpio_sim || \
-     grep -i gpio_sim /boot/config-"$(uname -r)" 2>/dev/null
-   uname -r        # record kernel version (gpio-sim needs Linux 5.17+)
-   ```
-
-2. If `gpio-sim` is available, create a virtual chip via configfs and confirm a
-   real `/dev/gpiochipN` appears (this one DOES return real line fds):
-
-   ```bash
-   sudo modprobe gpio-sim
-   sudo mount -t configfs none /sys/kernel/config 2>/dev/null || true
-   cd /sys/kernel/config/gpio-sim
-   sudo mkdir gar && cd gar
-   echo 8 | sudo tee bank0/num_lines        # create bank0 dir first if needed
-   echo 1 | sudo tee live
-   ls -l /dev/ | grep gpiochip               # expect a new gpiochipN
-   ```
-
-   Then drive a line and verify with `gpioget`/`gpioset` (libgpiod):
-
-   ```bash
-   gpiodetect; gpioinfo                       # find the sim chip name
-   gpioset <sim-chip> 18=1                     # should NOT error on fd handoff
-   gpioget <sim-chip> 17
-   ```
-
-3. Report back ONE of:
-   - **GPIO_SIM_OK** + kernel version + the new `/dev/gpiochipN` name → we switch
-     the GPIO plan to gpio-sim and the web-bridge talks to its sysfs/configfs
-     value attributes instead of the bridge socket.
-   - **NO_GPIO_SIM** → fall back to the CUSE internal-virtual-fd design, i.e. keep
-     a real line fd inside the daemon and multiplex follow-up ioctls on the main
-     fd (this is what `gpio_shim.so` already does in LD_PRELOAD form).
-
-Do NOT report "done" until LED18 toggle is actually reflected in the web panel
-and Button17 actually reaches `sensor_demo`. A passing `GPIO_GET_CHIPINFO_IOCTL`
-alone is NOT "done".
+It does not solve the line-request fd handoff described above and is not the
+runtime acceptance target. Use `gar sim runtime diag --json` to verify the
+selected runtime, generated GPIO lines, bridge, and application-facing device
+nodes together.

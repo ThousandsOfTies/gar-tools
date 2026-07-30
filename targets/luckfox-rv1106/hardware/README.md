@@ -2,8 +2,8 @@
 
 Default hardware definition CSV files for the Luckfox RV1106 target.
 
-`GaplessAgentRuntime` can copy these files into the local project `hardware/`
-directory with:
+From a registered product workspace, `GaplessAgentRuntime` copies these files
+into that project's `hardware/` directory with:
 
 ```bash
 gar hw init

@@ -6,7 +6,7 @@
   "defaultBackends": {
     "codespace": "local",
     "simulator": "ssh_remote",
-    "target": "adb_usb"
+    "target": "ssh_scp"
   },
   "backendNotes": {
     "simulator": "EC2 Graviton is the primary simulation host, same model as linux-device target.",

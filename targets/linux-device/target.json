@@ -16,10 +16,13 @@
     "docker": {
       "image": "gar-linux-device:latest",
       "buildContext": "targets/linux-device",
-      "bridgePort": 8080,
+      "publishedBridgePort": 8080,
+      "containerBridgePort": 8080,
+      "publishedHost": "127.0.0.1",
       "init": ["/sbin/init"],
       "privileged": true,
       "hostCgroups": true,
+      "environment": ["GAR_BRIDGE_HOST=0.0.0.0"],
       "tmpfs": ["/run", "/run/lock"],
       "mounts": [
         "/sys/fs/cgroup:/sys/fs/cgroup:rw",

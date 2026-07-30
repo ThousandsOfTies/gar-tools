@@ -2,14 +2,17 @@
  * cuse_i2c.c — CUSE-based I2C stub
  *
  * Creates /dev/i2c-1 (or the name given by --devname) as a userspace character
- * device.  Intercepts the three ioctl codes that the Linux i2c-dev interface
- * exposes to user-space programs:
+ * device.  Implements the minimal Linux i2c-dev operations needed by the
+ * simulated devices:
  *
  *   I2C_SLAVE      – select the slave address for subsequent transfers
  *   I2C_RDWR       – combined read/write transaction (struct i2c_rdwr_ioctl_data)
- *   I2C_SMBUS      – SMBus transaction (struct i2c_smbus_ioctl_data)
+ *   I2C_FUNCS      – reports plain I2C transfer support only
  *
- * Simulated devices (extend the dispatch table in dispatch_i2c_addr()):
+ * SMBus transactions, ten-bit addresses, and protocol-mangling flags are not
+ * implemented or advertised.
+ *
+ * Simulated devices (extend the sim_devices table):
  *   0x29  VL53L0X  ToF distance sensor
  */
 
@@ -30,6 +33,7 @@
 #include <unistd.h>
 #include <stdint.h>
 
+#include "i2c_rdwr_plan.h"
 #include "vl53l0x_sim.h"
 #include "ssd1306_sim.h"
 
@@ -131,136 +135,187 @@ static void i2c_write(fuse_req_t req, const char *buf, size_t size, off_t off,
 /* ioctl                                                               */
 /* ------------------------------------------------------------------ */
 
+static void request_rdwr_header(fuse_req_t req, const void *arg) {
+    struct iovec header_iov = {
+        .iov_base = (void *)arg,
+        .iov_len = sizeof(struct i2c_rdwr_ioctl_data),
+    };
+    fuse_reply_ioctl_retry(req, &header_iov, 1, NULL, 0);
+}
+
+static void request_rdwr_descriptors(
+        fuse_req_t req, const void *arg,
+        const struct i2c_rdwr_ioctl_data *header) {
+    struct iovec input_iov[2] = {
+        {
+            .iov_base = (void *)arg,
+            .iov_len = sizeof(*header),
+        },
+        {
+            .iov_base = header->msgs,
+            .iov_len = header->nmsgs * sizeof(struct i2c_msg),
+        },
+    };
+    fuse_reply_ioctl_retry(req, input_iov, 2, NULL, 0);
+}
+
+static void request_rdwr_buffers(
+        fuse_req_t req, const void *arg,
+        const struct i2c_rdwr_ioctl_data *header,
+        const struct i2c_msg *msgs) {
+    struct iovec input_iov[2 + I2C_RDWR_IOCTL_MAX_MSGS];
+    struct iovec output_iov[I2C_RDWR_IOCTL_MAX_MSGS];
+    size_t input_count = 0;
+    size_t output_count = 0;
+
+    input_iov[input_count++] = (struct iovec) {
+        .iov_base = (void *)arg,
+        .iov_len = sizeof(*header),
+    };
+    input_iov[input_count++] = (struct iovec) {
+        .iov_base = header->msgs,
+        .iov_len = header->nmsgs * sizeof(struct i2c_msg),
+    };
+
+    for (uint32_t i = 0; i < header->nmsgs; ++i) {
+        if (msgs[i].len == 0) {
+            continue;
+        }
+
+        if (msgs[i].flags & I2C_M_RD) {
+            output_iov[output_count++] = (struct iovec) {
+                .iov_base = msgs[i].buf,
+                .iov_len = msgs[i].len,
+            };
+        } else {
+            input_iov[input_count++] = (struct iovec) {
+                .iov_base = msgs[i].buf,
+                .iov_len = msgs[i].len,
+            };
+        }
+    }
+
+    fuse_reply_ioctl_retry(req, input_iov, input_count,
+                           output_count ? output_iov : NULL, output_count);
+}
+
+static int validate_simulated_devices(const struct i2c_msg *msgs,
+                                      uint32_t nmsgs) {
+    for (uint32_t i = 0; i < nmsgs; ++i) {
+        const sim_device_t *device = find_device(msgs[i].addr);
+
+        if (!device) {
+            return ENXIO;
+        }
+        if (msgs[i].len == 0) {
+            continue;
+        }
+        if ((msgs[i].flags & I2C_M_RD) && !device->read_reg) {
+            return EOPNOTSUPP;
+        }
+        if (!(msgs[i].flags & I2C_M_RD)
+                && !device->write_buf && !device->write_reg) {
+            return EOPNOTSUPP;
+        }
+    }
+    return 0;
+}
+
+static void execute_rdwr(i2c_session_t *session,
+                         const struct i2c_msg *msgs, uint32_t nmsgs,
+                         const uint8_t *write_data, uint8_t *read_data) {
+    size_t read_offset = 0;
+
+    for (uint32_t i = 0; i < nmsgs; ++i) {
+        const struct i2c_msg *msg = &msgs[i];
+        const sim_device_t *device = find_device(msg->addr);
+
+        session->slave_addr = msg->addr;
+        if (msg->flags & I2C_M_RD) {
+            for (size_t byte = 0; byte < msg->len; ++byte) {
+                read_data[read_offset + byte] =
+                    device->read_reg((uint8_t)(session->reg_ptr + byte));
+            }
+            read_offset += msg->len;
+            continue;
+        }
+
+        if (msg->len > 0 && device->write_buf) {
+            device->write_buf(write_data, msg->len);
+        } else if (msg->len > 0 && device->write_reg) {
+            session->reg_ptr = write_data[0];
+            session->reg_ptr_set = 1;
+            for (size_t byte = 1; byte < msg->len; ++byte) {
+                device->write_reg(
+                    (uint8_t)(session->reg_ptr + byte - 1), write_data[byte]);
+            }
+        }
+        write_data += msg->len;
+    }
+}
+
 static void handle_i2c_rdwr(fuse_req_t req, struct fuse_file_info *fi,
-                             const struct i2c_rdwr_ioctl_data *arg,
-                             const void *in_buf, size_t in_bufsz) {
-    /*
-     * CUSE ioctl retry protocol: if FUSE_IOCTL_RETRY is not set yet we must
-     * request the full iovec covering the msgs array and each msg buf.
-     * We use the simplified approach: ask for the full in_buf upfront.
-     *
-     * The kernel passes us a flat buffer after retries resolve the pointers.
-     * We reconstruct the msgs from it here.
-     */
-
-    i2c_session_t *s = (i2c_session_t *)(uintptr_t)fi->fh;
-
+                            const void *arg, const void *in_buf,
+                            size_t in_bufsz, size_t out_bufsz) {
     if (in_bufsz < sizeof(struct i2c_rdwr_ioctl_data)) {
-        /* Ask for the header first */
-        struct iovec iov = { (void *)(uintptr_t)arg,
-                             sizeof(struct i2c_rdwr_ioctl_data) };
-        fuse_reply_ioctl_retry(req, &iov, 1, NULL, 0);
+        request_rdwr_header(req, arg);
         return;
     }
 
-    const struct i2c_rdwr_ioctl_data *data = in_buf;
-    uint32_t nmsgs = data->nmsgs;
-
-    /*
-     * Build the iovec list for retry: header + msgs array + each data buffer.
-     * Maximum I2C_RDWR_IOCTL_MAX_MSGS = 42 per kernel.
-     */
-    if (nmsgs == 0 || nmsgs > 42) {
+    const struct i2c_rdwr_ioctl_data *header = in_buf;
+    if (!header->msgs || header->nmsgs == 0
+            || header->nmsgs > I2C_RDWR_IOCTL_MAX_MSGS) {
         fuse_reply_err(req, EINVAL);
         return;
     }
 
-    size_t msgs_size = nmsgs * sizeof(struct i2c_msg);
-    size_t needed = sizeof(struct i2c_rdwr_ioctl_data) + msgs_size;
-    /* Add each message buffer size */
-    const struct i2c_msg *msgs = (const struct i2c_msg *)(data + 1);
-    for (uint32_t i = 0; i < nmsgs && in_bufsz >= needed + sizeof(struct i2c_msg); i++) {
-        needed += msgs[i].len;
-    }
-
-    if (in_bufsz < needed) {
-        /* Not enough data yet, build retry iovecs */
-        struct iovec in_iov[43 * 2 + 1];
-        int iov_cnt = 0;
-
-        in_iov[iov_cnt].iov_base = (void *)(uintptr_t)arg;
-        in_iov[iov_cnt].iov_len  = sizeof(struct i2c_rdwr_ioctl_data);
-        iov_cnt++;
-
-        if (in_bufsz >= sizeof(struct i2c_rdwr_ioctl_data)) {
-            in_iov[iov_cnt].iov_base = (void *)(uintptr_t)data->msgs;
-            in_iov[iov_cnt].iov_len  = msgs_size;
-            iov_cnt++;
-
-            if (in_bufsz >= sizeof(struct i2c_rdwr_ioctl_data) + msgs_size) {
-                for (uint32_t i = 0; i < nmsgs; i++) {
-                    in_iov[iov_cnt].iov_base = (void *)(uintptr_t)msgs[i].buf;
-                    in_iov[iov_cnt].iov_len  = msgs[i].len;
-                    iov_cnt++;
-                }
-            }
-        }
-        fuse_reply_ioctl_retry(req, in_iov, iov_cnt, NULL, 0);
+    size_t descriptor_bytes = header->nmsgs * sizeof(struct i2c_msg);
+    size_t fixed_input_bytes = sizeof(*header) + descriptor_bytes;
+    if (in_bufsz < fixed_input_bytes) {
+        request_rdwr_descriptors(req, arg, header);
         return;
     }
 
-    /* All data available — process each message */
-    const uint8_t *cursor = (const uint8_t *)(msgs + nmsgs);
-    uint8_t out_bufs[42][256];
-    int     out_lens[42];
-    int     have_out = 0;
-
-    for (uint32_t i = 0; i < nmsgs; i++) {
-        uint16_t addr = msgs[i].addr;
-        uint16_t len  = msgs[i].len;
-        const sim_device_t *dev = find_device(addr);
-
-        s->slave_addr = addr;
-
-        if (msgs[i].flags & I2C_M_RD) {
-            /* Read message */
-            out_lens[i] = len;
-            have_out = 1;
-            if (dev && dev->read_reg) {
-                for (int j = 0; j < len; j++) {
-                    out_bufs[i][j] = dev->read_reg((uint8_t)(s->reg_ptr + j));
-                }
-            } else {
-                memset(out_bufs[i], 0xFF, len);
-            }
-            cursor += len;
-        } else {
-            /* Write message */
-            out_lens[i] = 0;
-            if (len > 0 && dev) {
-                if (dev->write_buf) {
-                    dev->write_buf(cursor, len);
-                } else if (dev->write_reg) {
-                    s->reg_ptr = cursor[0];
-                    for (int j = 1; j < len; j++) {
-                        dev->write_reg((uint8_t)(s->reg_ptr + (j - 1)), cursor[j]);
-                    }
-                }
-            }
-            cursor += len;
-        }
+    const struct i2c_msg *msgs = (const struct i2c_msg *)
+        ((const uint8_t *)in_buf + sizeof(*header));
+    i2c_rdwr_plan_t plan;
+    int error = i2c_rdwr_make_plan(msgs, header->nmsgs, &plan);
+    if (error) {
+        fuse_reply_err(req, error);
+        return;
     }
 
-    if (have_out) {
-        /* Pack read results into output buffer */
-        uint8_t out[42 * 256];
-        size_t out_pos = 0;
-        for (uint32_t i = 0; i < nmsgs; i++) {
-            if (out_lens[i] > 0) {
-                memcpy(out + out_pos, out_bufs[i], out_lens[i]);
-                out_pos += out_lens[i];
-            }
-        }
-        fuse_reply_ioctl(req, 0, out, out_pos);
-    } else {
-        fuse_reply_ioctl(req, 0, NULL, 0);
+    if (in_bufsz < plan.input_bytes || out_bufsz < plan.output_bytes) {
+        request_rdwr_buffers(req, arg, header, msgs);
+        return;
     }
+
+    error = validate_simulated_devices(msgs, header->nmsgs);
+    if (error) {
+        fuse_reply_err(req, error);
+        return;
+    }
+
+    uint8_t *read_data = plan.output_bytes ? malloc(plan.output_bytes) : NULL;
+    if (plan.output_bytes && !read_data) {
+        fuse_reply_err(req, ENOMEM);
+        return;
+    }
+
+    i2c_session_t *session = (i2c_session_t *)(uintptr_t)fi->fh;
+    const uint8_t *write_data = (const uint8_t *)in_buf + fixed_input_bytes;
+    execute_rdwr(session, msgs, header->nmsgs, write_data, read_data);
+    fuse_reply_ioctl(req, (int)header->nmsgs, read_data, plan.output_bytes);
+    free(read_data);
 }
 
 static void i2c_ioctl(fuse_req_t req, int cmd, void *arg,
                       struct fuse_file_info *fi, unsigned flags,
                       const void *in_buf, size_t in_bufsz, size_t out_bufsz) {
-    (void)out_bufsz;
+    if (flags & FUSE_IOCTL_COMPAT) {
+        fuse_reply_err(req, ENOSYS);
+        return;
+    }
 
     i2c_session_t *s = (i2c_session_t *)(uintptr_t)fi->fh;
 
@@ -268,30 +323,33 @@ static void i2c_ioctl(fuse_req_t req, int cmd, void *arg,
 
     case I2C_SLAVE:
     case I2C_SLAVE_FORCE:
+        if ((uintptr_t)arg > 0x7f) {
+            fuse_reply_err(req, EINVAL);
+            break;
+        }
         s->slave_addr = (uint16_t)(uintptr_t)arg;
         fprintf(stderr, "[cuse_i2c] I2C_SLAVE addr=0x%02x\n", s->slave_addr);
         fuse_reply_ioctl(req, 0, NULL, 0);
         break;
 
     case I2C_RDWR:
-        handle_i2c_rdwr(req, fi,
-                        (const struct i2c_rdwr_ioctl_data *)(uintptr_t)arg,
-                        in_buf, in_bufsz);
+        handle_i2c_rdwr(req, fi, arg, in_buf, in_bufsz, out_bufsz);
         break;
 
     case I2C_FUNCS: {
-        /* Report supported functionality */
-        if (!(flags & FUSE_IOCTL_DIR)) {
-            /* Need to write output */
-            unsigned long funcs = I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
+        const unsigned long funcs = I2C_FUNC_I2C;
+        if (out_bufsz < sizeof(funcs)) {
             struct iovec out_iov = { arg, sizeof(funcs) };
             fuse_reply_ioctl_retry(req, NULL, 0, &out_iov, 1);
         } else {
-            unsigned long funcs = I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
             fuse_reply_ioctl(req, 0, &funcs, sizeof(funcs));
         }
         break;
     }
+
+    case I2C_SMBUS:
+        fuse_reply_err(req, EOPNOTSUPP);
+        break;
 
     default:
         fprintf(stderr, "[cuse_i2c] unknown ioctl 0x%x\n", cmd);

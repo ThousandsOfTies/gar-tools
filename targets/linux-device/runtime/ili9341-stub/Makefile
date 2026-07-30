@@ -5,10 +5,11 @@ LDFLAGS  = -lfuse3
 # ARM build from this subdirectory: make CC=aarch64-linux-gnu-gcc
 
 SRCS = cuse_spi_ili9341.c ili9341_sim.c
+HEADERS = ili9341_sim.h
 BIN  = cuse_spi_ili9341
 
-$(BIN): $(SRCS)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+$(BIN): $(SRCS) $(HEADERS)
+	$(CC) $(CFLAGS) -o $@ $(SRCS) $(LDFLAGS)
 
 clean:
 	rm -f $(BIN)

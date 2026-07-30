@@ -11,66 +11,132 @@ hardware_dir="${GAR_HARDWARE_DIR:-$runtime_root/../hardware}"
 
 i2c_dev="${GAR_LUCKFOX_I2C_DEV:-i2c-3}"
 spi_dev="${GAR_LUCKFOX_SPI_DEV:-spidev0.0}"
+gpio_dev="${GAR_LUCKFOX_GPIO_DEV:-gpiochip0}"
+enable_i2c="${GAR_LUCKFOX_ENABLE_I2C_SIM:-0}"
 
 bridge_py="${GAR_BRIDGE_PY:-$linux_runtime_root/web-bridge/bridge.py}"
 cuse_i2c_bin="${GAR_CUSE_I2C:-$linux_runtime_root/i2c-stub/cuse_i2c}"
-cuse_spi_bin="${GAR_CUSE_SPI:-$linux_runtime_root/spi-stub/cuse_spi}"
+cuse_spi_bin="${GAR_CUSE_SPI:-$linux_runtime_root/ili9341-stub/cuse_spi_ili9341}"
+
+dc_line="${GAR_LUCKFOX_LCD_DC_LINE:-}"
+if [[ -z "$dc_line" && -f "$hardware_dir/gpio.csv" ]]; then
+  dc_line="$(awk -F, '$1 == "lcd_dc" { print $3; exit }' "$hardware_dir/gpio.csv")"
+fi
+dc_line="${dc_line:-23}"
+
+if [[ ! "$dc_line" =~ ^[0-9]+$ ]]; then
+  echo "invalid LCD DC line: $dc_line"
+  exit 1
+fi
+if [[ "$enable_i2c" != "0" && "$enable_i2c" != "1" ]]; then
+  echo "GAR_LUCKFOX_ENABLE_I2C_SIM must be 0 or 1"
+  exit 1
+fi
 
 if [[ ! -f "$bridge_py" ]]; then
   echo "missing bridge.py: $bridge_py"
   exit 1
 fi
-if [[ ! -x "$cuse_i2c_bin" ]]; then
+if [[ "$enable_i2c" == "1" && ! -x "$cuse_i2c_bin" ]]; then
   echo "missing cuse_i2c binary: $cuse_i2c_bin"
   echo "build hint: make -C $linux_runtime_root/i2c-stub"
   exit 1
 fi
 if [[ ! -x "$cuse_spi_bin" ]]; then
   echo "missing cuse_spi binary: $cuse_spi_bin"
-  echo "build hint: make -C $linux_runtime_root/spi-stub"
+  echo "build hint: make -C $linux_runtime_root/ili9341-stub"
+  exit 1
+fi
+if [[ ! -e "/dev/$gpio_dev" ]]; then
+  echo "missing existing gpio-sim device: /dev/$gpio_dev"
+  echo "create the kernel-backed gpio-sim device before using this diagnostic launcher"
   exit 1
 fi
 
 mkdir -p "$run_dir"
-rm -f "$sock_path"
 
 python_cmd="${GAR_BRIDGE_PYTHON:-python3}"
 
+pidfile_process_running() {
+  local pidfile="$1"
+  local expected="$2"
+  local pid
+  local command_line
+
+  [[ -f "$pidfile" ]] || return 1
+  read -r pid <"$pidfile"
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  command_line="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
+  [[ "$command_line" == *"$expected"* ]]
+}
+
 echo "[devfs-start] run_dir=$run_dir"
 echo "[devfs-start] sock=$sock_path"
-echo "[devfs-start] i2c=$i2c_dev spi=$spi_dev"
+echo "[devfs-start] gpio=$gpio_dev i2c_enabled=$enable_i2c i2c=$i2c_dev spi=$spi_dev dc_line=$dc_line"
 
-if [[ -f "$run_dir/bridge.pid" ]] && kill -0 "$(cat "$run_dir/bridge.pid")" 2>/dev/null; then
+if pidfile_process_running "$run_dir/bridge.pid" "$bridge_py"; then
   echo "[devfs-start] bridge already running"
 else
+  rm -f "$run_dir/bridge.pid"
+  if [[ -L "$sock_path" || ( -e "$sock_path" && ! -S "$sock_path" ) ]]; then
+    echo "refusing to replace non-socket bridge path: $sock_path"
+    exit 1
+  fi
+  # bridge.py probes an existing socket and removes it only when no process is
+  # listening.  Removing it here could detach an independently started bridge.
   env GAR_RUNTIME_DIR="$run_dir" GAR_HW_SIM_SOCK="$sock_path" GAR_HARDWARE_DIR="$hardware_dir" \
     nohup "$python_cmd" "$bridge_py" >"$run_dir/bridge.log" 2>&1 &
   echo $! >"$run_dir/bridge.pid"
 fi
 
-if [[ -f "$run_dir/cuse_i2c.pid" ]] && kill -0 "$(cat "$run_dir/cuse_i2c.pid")" 2>/dev/null; then
-  echo "[devfs-start] cuse_i2c already running"
-else
-  env GAR_RUNTIME_DIR="$run_dir" GAR_HW_SIM_SOCK="$sock_path" GAR_HARDWARE_DIR="$hardware_dir" \
-    nohup "$cuse_i2c_bin" -f --devname="$i2c_dev" >"$run_dir/cuse_i2c.log" 2>&1 &
-  echo $! >"$run_dir/cuse_i2c.pid"
+for _ in $(seq 1 50); do
+  if [[ -S "$sock_path" ]] && pidfile_process_running "$run_dir/bridge.pid" "$bridge_py"; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ ! -S "$sock_path" ]] || ! pidfile_process_running "$run_dir/bridge.pid" "$bridge_py"; then
+  echo "[devfs-start] bridge failed to become ready; see $run_dir/bridge.log"
+  exit 1
 fi
 
-if [[ -f "$run_dir/cuse_spi.pid" ]] && kill -0 "$(cat "$run_dir/cuse_spi.pid")" 2>/dev/null; then
+if [[ "$enable_i2c" == "1" ]]; then
+  if pidfile_process_running "$run_dir/cuse_i2c.pid" "$cuse_i2c_bin"; then
+    echo "[devfs-start] cuse_i2c already running"
+  else
+    rm -f "$run_dir/cuse_i2c.pid"
+    env GAR_RUNTIME_DIR="$run_dir" GAR_HW_SIM_SOCK="$sock_path" GAR_HARDWARE_DIR="$hardware_dir" \
+      nohup "$cuse_i2c_bin" -f --devname="$i2c_dev" >"$run_dir/cuse_i2c.log" 2>&1 &
+    echo $! >"$run_dir/cuse_i2c.pid"
+  fi
+fi
+
+if pidfile_process_running "$run_dir/cuse_spi.pid" "$cuse_spi_bin"; then
   echo "[devfs-start] cuse_spi already running"
 else
+  rm -f "$run_dir/cuse_spi.pid"
   env GAR_RUNTIME_DIR="$run_dir" GAR_HW_SIM_SOCK="$sock_path" GAR_HARDWARE_DIR="$hardware_dir" \
-    nohup "$cuse_spi_bin" -f --devname="$spi_dev" >"$run_dir/cuse_spi.log" 2>&1 &
+    nohup "$cuse_spi_bin" -f --devname="$spi_dev" --dc-line="$dc_line" >"$run_dir/cuse_spi.log" 2>&1 &
   echo $! >"$run_dir/cuse_spi.pid"
 fi
 
 for n in $(seq 1 30); do
   ok=1
-  [[ -e "/dev/$i2c_dev" ]] || ok=0
+  if [[ "$enable_i2c" == "1" ]]; then
+    [[ -e "/dev/$i2c_dev" ]] || ok=0
+  fi
   [[ -e "/dev/$spi_dev" ]] || ok=0
+  pidfile_process_running "$run_dir/cuse_spi.pid" "$cuse_spi_bin" || ok=0
+  if [[ "$enable_i2c" == "1" ]]; then
+    pidfile_process_running "$run_dir/cuse_i2c.pid" "$cuse_i2c_bin" || ok=0
+  fi
   if [[ "$ok" == "1" ]]; then
-    chmod 666 "/dev/$i2c_dev" "/dev/$spi_dev" 2>/dev/null || true
-    echo "[devfs-start] ready: /dev/$i2c_dev /dev/$spi_dev"
+    chmod 666 "/dev/$spi_dev" 2>/dev/null || true
+    if [[ "$enable_i2c" == "1" ]]; then
+      chmod 666 "/dev/$i2c_dev" 2>/dev/null || true
+    fi
+    echo "[devfs-start] ready: /dev/$spi_dev"
     exit 0
   fi
   sleep 0.1

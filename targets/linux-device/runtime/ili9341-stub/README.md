@@ -20,9 +20,9 @@ SPI ioctl の外側にあるため、`cuse_spi_ili9341` は SPI 転送を受け�
 web bridge（`GAR_HW_SIM_SOCK` または `GAR_RUNTIME_DIR/hw_sim.sock`）に
 「DC ピンの現在値」を問い合わせ、それに応じてコマンド/データを振り分けます。
 
-DC ピンの gpio-sim 上のライン番号は `--dc-line=N`（既定 16）で指定し、
-web bridge 側の `ILI9341_DC_LINE`（`web-bridge/bridge.py`）と一致させて
-ください。
+DCピンのgpio-sim上のline番号は`--dc-line=N`で指定します。通常のruntime
+起動では、targetの`hardware/gpio.csv`にある`lcd_dc`のlineをlauncherと
+web bridgeが共有するため、個別指定は不要です。
 
 ## 対応 ioctl
 
@@ -54,14 +54,21 @@ web bridge 側の `ILI9341_DC_LINE`（`web-bridge/bridge.py`）と一致させ�
 
 ## ビルド
 
-**ビルドは Codespaces で行う**（鉄則）。EC2 上では `make` しない。
+通常は選択済みのBuildEnvironmentでGARにbuild・配置させます。
 
 ```bash
-# Codespaces: aarch64 cross-build（EC2 Graviton と同じ ABI）
-make CC=aarch64-linux-gnu-gcc
+gar sim runtime build
+gar sim runtime deploy
+```
 
-# x86_64（構文確認用）
-make
+componentを単独で調査するときだけ、その環境に合うcompilerを明示します。
+
+```bash
+# aarch64 simulation host向けcross build
+make -C targets/linux-device/runtime/ili9341-stub CC=aarch64-linux-gnu-gcc
+
+# local host向け
+make -C targets/linux-device/runtime/ili9341-stub CC=gcc
 ```
 
 `libfuse3-dev`（`/usr/include/fuse3`）が必要です。
@@ -70,17 +77,17 @@ make
 
 ```bash
 # /dev/fuse へのアクセスが必要
-sudo ./cuse_spi_ili9341 -f --devname=spidev0.0 --dc-line=16
+sudo ./cuse_spi_ili9341 -f --devname=spidev0.0 --dc-line=<lcd-dc-line>
 ```
 
-起動後は `chmod 666 /dev/spidev0.0` でアプリから読めるようにします。
-`-f` は foreground 実行。バックグラウンド常駐は `gar sim start` に組み込みます
-（`cuse_spi`/`cuse_i2c` と同様）。
+`-f`はforeground実行です。通常の常駐起動、hardware CSVの反映、device nodeの
+permission設定は`gar sim runtime start`が担当します。
 
 ## 動作確認の受け入れ基準
 
-1. `gar sim start` で `cuse_spi_ili9341` が常駐し `/dev/spidev0.0` が見える
+1. `gar sim runtime start`で`cuse_spi_ili9341`が常駐し、`/dev/spidev0.0`が見える
 2. `video_monitor.py`（LD_PRELOAD なし）が初期化シーケンスを流せてエラーにならない
 3. カラーバー分岐を表示させた状態で Virtual Hardware Panel の ILI9341 canvas に
    映像が表示される
-4. `gar sim io` 側から回転を送っても（`ky040` 側の変更）表示は壊れない
+4. Hardware PanelからKY-040を回転させても表示が壊れない
+5. `gar sim runtime diag --json`がruntime全体を正常と判定する

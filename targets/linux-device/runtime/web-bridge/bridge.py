@@ -1,23 +1,72 @@
-"""
-bridge.py — Hardware simulator web bridge
+"""Hardware simulator bridge for C stubs and the browser control panel.
 
-Unix socket ↔ WebSocket ↔ Browser HTML panel
-
-Devices:
-  GPIO : LED (output), Button (input), KY-040 rotary encoder (gar-stream-rx)
-  I2C  : VL53L0X distance sensor
-  SPI  : MFRC-522 RFID reader, LCD HAT 240x240, ILI9341 320x240 (gar-stream-rx)
+The bridge has one HTTP endpoint.  It serves the panel, its JSON API, and a
+WebSocket at ``/ws``.  CUSE stubs communicate through a separate Unix socket.
+GPIO assignments and available simulated devices come from
+``GAR_HARDWARE_DIR`` CSV files when they are available.
 """
+
+from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
+import errno
 import json
+import logging
 import os
 import socket
+import stat
 import threading
 from pathlib import Path
+from typing import Mapping
 
-import websockets
-from aiohttp import web
+from aiohttp import WSMsgType, web
+
+from hardware_config import GpioLine, HardwareConfig, load_hardware_config
+from request_validation import (
+    RequestValidationError,
+    boolean_value,
+    bounded_int,
+    browser_request_allowed,
+    configured_line,
+    parse_json_object,
+    resolve_panel_file,
+    rfid_uid,
+)
+
+
+LOGGER = logging.getLogger("gar.hardware_bridge")
+
+HTTP_HOST = os.environ.get("GAR_BRIDGE_HOST", "127.0.0.1")
+HTTP_PORT = int(os.environ.get("GAR_BRIDGE_PORT", "8080"))
+PANEL_DIR = Path(__file__).parent / "panel"
+
+
+def _allowed_http_hosts() -> frozenset[str]:
+    configured = os.environ.get("GAR_BRIDGE_ALLOWED_HOSTS")
+    if configured:
+        values = configured.split(",")
+    else:
+        values = ["127.0.0.1", "localhost", "::1"]
+        if HTTP_HOST not in {"", "0.0.0.0", "::"}:
+            values.append(HTTP_HOST)
+    return frozenset(value.strip().casefold() for value in values if value.strip())
+
+
+ALLOWED_HTTP_HOSTS = _allowed_http_hosts()
+
+MAX_BROWSER_MESSAGE_BYTES = 64 * 1024
+MAX_STUB_LINE_BYTES = 2 * 1024 * 1024
+MAX_PIXEL_DATA_CHARS = 1_500_000
+MAX_BUTTON_PRESS_MS = 10_000
+MAX_RANGE_MM = 4_000
+MAX_STUB_CONNECTIONS = 16
+MAX_PENDING_STUB_BROADCASTS = 64
+FIRST_STUB_MESSAGE_TIMEOUT_SECONDS = 5.0
+ROTARY_STEP_DELAY_SECONDS = 0.02
+DEFAULT_RFID_UID = "04:AB:CD:EF:01:23"
+
 
 def _runtime_socket_path() -> str:
     explicit = os.environ.get("GAR_HW_SIM_SOCK")
@@ -29,58 +78,50 @@ def _runtime_socket_path() -> str:
     return "/tmp/hw_sim.sock"
 
 
-UNIX_SOCK  = _runtime_socket_path()
-HTTP_PORT  = 8080
-WS_PORT    = 8765
-PANEL_DIR  = Path(__file__).parent / "panel"
+UNIX_SOCKET_PATH = _runtime_socket_path()
+HARDWARE_CONFIG: HardwareConfig = load_hardware_config(
+    os.environ.get("GAR_HARDWARE_DIR")
+)
+GPIO_BY_LINE = HARDWARE_CONFIG.gpio_by_line
 
-GPIO_SIM_ROOTS = tuple(Path("/sys/devices/platform").glob("gpio-sim.*/gpiochip*"))
 
-# gar-adhoc-app sensor_demo scenario
-GPIO_SIM_INPUT_LINES = (17, 27)
-GPIO_SIM_OUTPUT_LINES = (18, 24)
-
-# gar-stream-rx scenario (Luckfox Lyra Plus video monitor). These gpio-sim
-# line numbers must match however the scenario's gpio-sim chip was created;
-# adjust here and in ili9341-stub's --dc-line if your setup differs.
-ROTARY_CLK_LINE = 5
-ROTARY_DT_LINE = 6
-ROTARY_SW_LINE = 13
-ILI9341_DC_LINE = 16
-ROTARY_STEP_DELAY_S = 0.02
-
-GPIO_SIM_INPUT_LINES += (ROTARY_CLK_LINE, ROTARY_DT_LINE, ROTARY_SW_LINE)
-GPIO_SIM_OUTPUT_LINES += (ILI9341_DC_LINE,)
-
-# ------------------------------------------------------------------ #
-# Shared state                                                         #
-# ------------------------------------------------------------------ #
-
-state = {
+state: dict[str, object] = {
+    "hardware": HARDWARE_CONFIG.public_mapping(),
     "gpio": {
-        "leds":    {18: False, 24: False},
-        "buttons": {17: False, 27: False},
-        "rotary":  {"counter": 0},   # KY-040 (gar-stream-rx)
+        "leds": {line: False for line in HARDWARE_CONFIG.led_lines},
+        "buttons": {line: False for line in HARDWARE_CONFIG.button_lines},
+        "rotary": {"counter": 0},
     },
     "i2c": {
         "vl53l0x": {"range_mm": 300, "status": 0x01},
-        "ssd1306": {"framebuf": None},   # 128x64 monochrome (1024 bytes)
+        "ssd1306": {"framebuf": None},
     },
     "spi": {
         "mfrc522": {"uid": None, "present": False},
-        "lcd":     {"pixels": None},
-        "ili9341": {"pixels": None, "width": 320, "height": 240},  # gar-stream-rx
+        "lcd": {"pixels": None},
+        "ili9341": {"pixels": None, "width": 320, "height": 240},
     },
 }
 
-ws_clients: set = set()
+websocket_clients: set[web.WebSocketResponse] = set()
+_button_press_tokens: dict[int, object] = {}
+_rotary_lock = asyncio.Lock()
+_stub_connection_slots = threading.BoundedSemaphore(MAX_STUB_CONNECTIONS)
+_stub_broadcast_slots = threading.BoundedSemaphore(MAX_PENDING_STUB_BROADCASTS)
 
-# ------------------------------------------------------------------ #
-# gpio-sim sysfs sync                                                  #
-# ------------------------------------------------------------------ #
+
+# ---------------------------------------------------------------------------
+# gpio-sim sysfs synchronisation
+# ---------------------------------------------------------------------------
+
+
+def _gpio_sim_roots() -> tuple[Path, ...]:
+    """Discover roots on demand because gpio-sim may appear after startup."""
+    return tuple(Path("/sys/devices/platform").glob("gpio-sim.*/gpiochip*"))
+
 
 def _gpio_sim_line_dir(line: int) -> Path | None:
-    for root in GPIO_SIM_ROOTS:
+    for root in _gpio_sim_roots():
         line_dir = root / f"sim_gpio{line}"
         if line_dir.exists():
             return line_dir
@@ -93,380 +134,783 @@ def _gpio_sim_value(line: int) -> bool | None:
         return None
     try:
         return (line_dir / "value").read_text(encoding="utf-8").strip() == "1"
-    except OSError:
+    except OSError as exc:
+        LOGGER.warning("gpio-sim read failed for line %s: %s", line, exc)
         return None
 
 
-def _gpio_sim_set_input(line: int, value: bool) -> None:
+def _gpio_sim_set_level(line: int, high: bool) -> None:
     line_dir = _gpio_sim_line_dir(line)
     if line_dir is None:
         return
     try:
-        (line_dir / "pull").write_text("pull-up\n" if value else "pull-down\n", encoding="utf-8")
+        pull = "pull-up\n" if high else "pull-down\n"
+        (line_dir / "pull").write_text(pull, encoding="utf-8")
     except OSError as exc:
-        print(f"[bridge] gpio-sim input sync failed line={line}: {exc}")
+        LOGGER.warning("gpio-sim input sync failed for line %s: %s", line, exc)
 
 
-async def poll_gpio_sim_outputs():
+def _gpio_sim_set_button(line: int, pressed: bool) -> None:
+    definition = GPIO_BY_LINE[line]
+    electrical_high = definition.electrical_level_for(pressed)
+    _gpio_sim_set_level(line, electrical_high)
+
+
+async def poll_gpio_sim_outputs() -> None:
+    gpio_state = state["gpio"]
+    assert isinstance(gpio_state, dict)
+    led_state = gpio_state["leds"]
+    assert isinstance(led_state, dict)
+
     while True:
-        for line in GPIO_SIM_OUTPUT_LINES:
-            value = _gpio_sim_value(line)
-            if value is None:
+        for line in HARDWARE_CONFIG.led_lines:
+            electrical_high = _gpio_sim_value(line)
+            if electrical_high is None:
                 continue
-            if state["gpio"]["leds"].get(line) != value:
-                state["gpio"]["leds"][line] = value
-                await broadcast({"type": "led", "line": line, "value": value})
+            definition = GPIO_BY_LINE[line]
+            value = definition.active_at_level(electrical_high)
+            if led_state.get(line) == value:
+                continue
+            led_state[line] = value
+            await broadcast({"type": "led", "line": line, "value": value})
         await asyncio.sleep(0.1)
 
-# ------------------------------------------------------------------ #
-# WebSocket broadcast                                                  #
-# ------------------------------------------------------------------ #
 
-async def broadcast(msg: dict):
-    if ws_clients:
-        data = json.dumps(msg)
-        await asyncio.gather(*[c.send(data) for c in ws_clients],
-                             return_exceptions=True)
+# ---------------------------------------------------------------------------
+# Browser broadcast and virtual hardware actions
+# ---------------------------------------------------------------------------
 
 
-# ------------------------------------------------------------------ #
-# Virtual hardware actions                                             #
-# ------------------------------------------------------------------ #
+async def broadcast(message: dict[str, object]) -> None:
+    if not websocket_clients:
+        return
 
-async def set_button(line: int, value: bool):
-    state["gpio"]["buttons"][line] = value
-    if line in GPIO_SIM_INPUT_LINES:
-        _gpio_sim_set_input(line, value)
-    await broadcast({"type": "button", "line": line, "value": value})
+    encoded = json.dumps(message, separators=(",", ":"))
+    clients = tuple(client for client in websocket_clients if not client.closed)
+    results = await asyncio.gather(
+        *(client.send_str(encoded) for client in clients),
+        return_exceptions=True,
+    )
+    for client, result in zip(clients, results, strict=False):
+        if isinstance(result, Exception):
+            LOGGER.debug("dropping WebSocket client after send failure: %s", result)
+            websocket_clients.discard(client)
 
 
-async def press_button(line: int, duration_ms: int):
-    await set_button(line, True)
-    if duration_ms:
+async def _apply_button_state(line: int, pressed: bool) -> None:
+    gpio_state = state["gpio"]
+    assert isinstance(gpio_state, dict)
+    buttons = gpio_state["buttons"]
+    assert isinstance(buttons, dict)
+    buttons[line] = pressed
+    _gpio_sim_set_button(line, pressed)
+    await broadcast({"type": "button", "line": line, "value": pressed})
+
+
+async def set_button(line: int, pressed: bool) -> None:
+    """Set a button and invalidate any delayed release from an older press."""
+    _button_press_tokens.pop(line, None)
+    await _apply_button_state(line, pressed)
+
+
+async def press_button(line: int, duration_ms: int) -> None:
+    """Press then release, without an older press releasing a newer one early."""
+    token = object()
+    _button_press_tokens[line] = token
+    try:
+        await _apply_button_state(line, True)
         await asyncio.sleep(duration_ms / 1000)
-        await set_button(line, False)
+    finally:
+        if _button_press_tokens.get(line) is token:
+            _button_press_tokens.pop(line, None)
+            await _apply_button_state(line, False)
 
 
-async def tap_rfid(uid: str):
-    state["spi"]["mfrc522"] = {"uid": uid, "present": True}
+async def tap_rfid(uid: str) -> None:
+    spi_state = state["spi"]
+    assert isinstance(spi_state, dict)
+    spi_state["mfrc522"] = {"uid": uid, "present": True}
     await broadcast({"type": "rfid", "uid": uid, "present": True})
 
 
-async def remove_rfid():
-    state["spi"]["mfrc522"] = {"uid": None, "present": False}
+async def remove_rfid() -> None:
+    spi_state = state["spi"]
+    assert isinstance(spi_state, dict)
+    spi_state["mfrc522"] = {"uid": None, "present": False}
     await broadcast({"type": "rfid", "uid": None, "present": False})
 
 
-async def set_range(mm: int):
-    state["i2c"]["vl53l0x"]["range_mm"] = mm
-    await broadcast({"type": "range", "value": mm})
+async def set_range(range_mm: int) -> None:
+    i2c_state = state["i2c"]
+    assert isinstance(i2c_state, dict)
+    sensor = i2c_state["vl53l0x"]
+    assert isinstance(sensor, dict)
+    sensor["range_mm"] = range_mm
+    await broadcast({"type": "range", "value": range_mm})
 
 
-async def rotary_step(direction: int):
-    """Emulate one KY-040 detent (gar-stream-rx). direction: >=0 is CW, <0 is CCW.
+def _configured_rotary():
+    rotary = HARDWARE_CONFIG.rotary
+    if rotary is None:
+        raise RequestValidationError("no rotary encoder is configured in gpio.csv")
+    return rotary
 
-    ky040.py only watches CLK edges and compares DT's level at that instant
-    (not a full Gray-code decode), so a clean detent needs DT to already be
-    at its "new" level for the second CLK edge - see the step ordering below.
-    Idle rest state for both lines is pulled high (matches a KY-040 with
-    external pull-ups, as the gar-stream-rx wiring notes recommend).
-    """
-    clk, dt = ROTARY_CLK_LINE, ROTARY_DT_LINE
-    if direction >= 0:
-        _gpio_sim_set_input(clk, False)
-        await asyncio.sleep(ROTARY_STEP_DELAY_S)
-        _gpio_sim_set_input(dt, False)
-        await asyncio.sleep(ROTARY_STEP_DELAY_S)
-        _gpio_sim_set_input(clk, True)
-        await asyncio.sleep(ROTARY_STEP_DELAY_S)
-        _gpio_sim_set_input(dt, True)
+
+def _require_device(driver: str) -> None:
+    if driver not in HARDWARE_CONFIG.device_drivers:
+        raise RequestValidationError(
+            f"device driver {driver!r} is not configured in the hardware CSV files"
+        )
+
+
+async def rotary_step(direction: int) -> None:
+    """Emulate one KY-040 detent using the configured A/B input lines."""
+    rotary = _configured_rotary()
+    async with _rotary_lock:
+        if direction > 0:
+            levels = (
+                (rotary.clock, False),
+                (rotary.data, False),
+                (rotary.clock, True),
+                (rotary.data, True),
+            )
+        else:
+            levels = (
+                (rotary.data, False),
+                (rotary.clock, False),
+                (rotary.data, True),
+                (rotary.clock, True),
+            )
+
+        try:
+            for index, (line, high) in enumerate(levels):
+                _gpio_sim_set_level(line, high)
+                if index < len(levels) - 1:
+                    await asyncio.sleep(ROTARY_STEP_DELAY_SECONDS)
+        finally:
+            _gpio_sim_set_level(rotary.clock, True)
+            _gpio_sim_set_level(rotary.data, True)
+
+        gpio_state = state["gpio"]
+        assert isinstance(gpio_state, dict)
+        rotary_state = gpio_state["rotary"]
+        assert isinstance(rotary_state, dict)
+        counter = int(rotary_state["counter"]) + direction
+        rotary_state["counter"] = counter
+        await broadcast({"type": "rotary", "counter": counter})
+
+
+async def rotary_press() -> None:
+    """Pulse the active-low KY-040 switch while serialising rotary actions."""
+    rotary = _configured_rotary()
+    definition = GPIO_BY_LINE[rotary.switch]
+    async with _rotary_lock:
+        pressed_level = definition.electrical_level_for(True)
+        try:
+            _gpio_sim_set_level(rotary.switch, pressed_level)
+            await broadcast({"type": "rotary_button", "value": True})
+            await asyncio.sleep(0.15)
+        finally:
+            _gpio_sim_set_level(rotary.switch, not pressed_level)
+            await broadcast({"type": "rotary_button", "value": False})
+
+
+# ---------------------------------------------------------------------------
+# Browser WebSocket and request validation
+# ---------------------------------------------------------------------------
+
+
+def _button_line(data: Mapping[str, object]) -> int:
+    if not HARDWARE_CONFIG.button_lines:
+        raise RequestValidationError("no push button is configured in gpio.csv")
+    line = bounded_int(
+        data,
+        "line",
+        default=HARDWARE_CONFIG.button_lines[0],
+        minimum=0,
+        maximum=4095,
+    )
+    return configured_line(line, HARDWARE_CONFIG.button_lines, "button input")
+
+
+def _direction(data: Mapping[str, object]) -> int:
+    direction = bounded_int(data, "direction", default=1, minimum=-1, maximum=1)
+    if direction == 0:
+        raise RequestValidationError("direction must be -1 or 1")
+    return direction
+
+
+async def _dispatch_browser_message(data: Mapping[str, object]) -> None:
+    message_type = data.get("type")
+    if not isinstance(message_type, str):
+        raise RequestValidationError("type must be a string")
+
+    if message_type == "button":
+        await set_button(_button_line(data), boolean_value(data, "value"))
+    elif message_type == "rfid_tap":
+        _require_device("mfrc522")
+        await tap_rfid(rfid_uid(data, DEFAULT_RFID_UID))
+    elif message_type == "rfid_remove":
+        _require_device("mfrc522")
+        await remove_rfid()
+    elif message_type == "range_set":
+        _require_device("vl53l0x")
+        range_mm = bounded_int(
+            data, "value", default=300, minimum=0, maximum=MAX_RANGE_MM
+        )
+        await set_range(range_mm)
+    elif message_type == "rotary_rotate":
+        await rotary_step(_direction(data))
+    elif message_type == "rotary_press":
+        await rotary_press()
     else:
-        _gpio_sim_set_input(dt, False)
-        await asyncio.sleep(ROTARY_STEP_DELAY_S)
-        _gpio_sim_set_input(clk, False)
-        await asyncio.sleep(ROTARY_STEP_DELAY_S)
-        _gpio_sim_set_input(dt, True)
-        await asyncio.sleep(ROTARY_STEP_DELAY_S)
-        _gpio_sim_set_input(clk, True)
-
-    state["gpio"]["rotary"]["counter"] += 1 if direction >= 0 else -1
-    await broadcast({"type": "rotary", "counter": state["gpio"]["rotary"]["counter"]})
+        raise RequestValidationError(f"unsupported message type: {message_type!r}")
 
 
-async def rotary_press():
-    """KY-040 SW is active-low (idle high, falling edge on press) - the
-    opposite polarity from the active-high buttons above, so this doesn't
-    reuse press_button()."""
-    line = ROTARY_SW_LINE
-    _gpio_sim_set_input(line, False)
-    await broadcast({"type": "rotary_button", "value": True})
-    await asyncio.sleep(0.15)
-    _gpio_sim_set_input(line, True)
-    await broadcast({"type": "rotary_button", "value": False})
-
-# ------------------------------------------------------------------ #
-# WebSocket handler (browser ↔ bridge)                                 #
-# ------------------------------------------------------------------ #
-
-async def ws_handler(websocket):
-    ws_clients.add(websocket)
+async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
+    websocket = web.WebSocketResponse(
+        heartbeat=30,
+        max_msg_size=MAX_BROWSER_MESSAGE_BYTES,
+    )
+    await websocket.prepare(request)
+    websocket_clients.add(websocket)
     try:
-        await websocket.send(json.dumps({"type": "init", "state": state}))
-        async for raw in websocket:
-            msg = json.loads(raw)
-            mtype = msg.get("type")
-
-            if mtype == "button":
-                line = msg["line"]
-                val  = bool(msg["value"])
-                await set_button(line, val)
-
-            elif mtype == "rfid_tap":
-                uid = msg.get("uid", "04:AB:CD:EF:01:23")
-                await tap_rfid(uid)
-
-            elif mtype == "rfid_remove":
-                await remove_rfid()
-
-            elif mtype == "range_set":
-                mm = int(msg.get("value", 300))
-                await set_range(mm)
-
-            elif mtype == "rotary_rotate":
-                direction = int(msg.get("direction", 1))
-                await rotary_step(direction)
-
-            elif mtype == "rotary_press":
-                await rotary_press()
-
-    except websockets.ConnectionClosed:
-        pass
+        await websocket.send_json({"type": "init", "state": state})
+        async for message in websocket:
+            if message.type == WSMsgType.TEXT:
+                try:
+                    data = parse_json_object(message.data)
+                    await _dispatch_browser_message(data)
+                except RequestValidationError as exc:
+                    await websocket.send_json({"type": "error", "error": str(exc)})
+            elif message.type == WSMsgType.ERROR:
+                LOGGER.warning("WebSocket receive failed: %s", websocket.exception())
+                break
     finally:
-        ws_clients.discard(websocket)
+        websocket_clients.discard(websocket)
+    return websocket
 
-# ------------------------------------------------------------------ #
-# Unix socket server (C shim/stub ↔ bridge)                            #
-# ------------------------------------------------------------------ #
 
-def handle_stub_message(raw: str, loop) -> str | None:
-    """Process a JSON line from a C stub. Returns response string if needed."""
+# ---------------------------------------------------------------------------
+# Unix socket server for CUSE stubs
+# ---------------------------------------------------------------------------
+
+
+def _schedule_broadcast(
+    message: dict[str, object], loop: asyncio.AbstractEventLoop
+) -> None:
+    if not _stub_broadcast_slots.acquire(blocking=False):
+        LOGGER.debug("dropping stub broadcast because the pending queue is full")
+        return
+
+    coroutine = broadcast(message)
     try:
-        msg = json.loads(raw.strip())
-    except json.JSONDecodeError:
+        future = asyncio.run_coroutine_threadsafe(coroutine, loop)
+    except BaseException:
+        coroutine.close()
+        _stub_broadcast_slots.release()
+        raise
+
+    def log_failure(completed) -> None:
+        try:
+            completed.result()
+        except Exception as exc:  # the event loop owns the underlying exception
+            LOGGER.warning("stub event broadcast failed: %s", exc)
+        finally:
+            _stub_broadcast_slots.release()
+
+    future.add_done_callback(log_failure)
+
+
+def _pixel_data(
+    data: Mapping[str, object],
+    field: str,
+    *,
+    expected_bytes: int,
+) -> str | None:
+    value = data.get(field)
+    if value is None:
         return None
+    if not isinstance(value, str):
+        raise RequestValidationError(f"{field} must be a base64 string or null")
+    expected_characters = 4 * ((expected_bytes + 2) // 3)
+    if expected_characters > MAX_PIXEL_DATA_CHARS:
+        raise RequestValidationError(f"{field} dimensions exceed the transfer limit")
+    if len(value) != expected_characters:
+        raise RequestValidationError(
+            f"{field} must contain {expected_characters} base64 characters, got {len(value)}"
+        )
+    try:
+        decoded = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise RequestValidationError(f"{field} must be valid base64") from exc
+    if len(decoded) != expected_bytes:
+        raise RequestValidationError(
+            f"{field} must decode to {expected_bytes} bytes, got {len(decoded)}"
+        )
+    return value
 
-    event  = msg.get("event")
-    device = msg.get("device")
 
-    if event == "set" and device == "gpio":
-        line = msg["line"]
-        val  = bool(msg["value"])
-        state["gpio"]["leds"][line] = val
-        asyncio.run_coroutine_threadsafe(
-            broadcast({"type": "led", "line": line, "value": val}), loop)
+def handle_stub_message(raw: str, loop: asyncio.AbstractEventLoop) -> str | None:
+    """Process one JSON line from a C stub and return an optional response."""
+    expects_response = False
+    try:
+        message = parse_json_object(raw.strip())
+        expects_response = "req" in message
+        event = message.get("event")
+        device = message.get("device")
 
-    elif event == "set" and device == "i2c_range":
-        mm = int(msg.get("value", 300))
-        state["i2c"]["vl53l0x"]["range_mm"] = mm
-        asyncio.run_coroutine_threadsafe(
-            broadcast({"type": "range", "value": mm}), loop)
+        if expects_response and "event" in message:
+            raise RequestValidationError("message cannot contain both req and event")
 
-    elif event == "set" and device == "lcd":
-        state["spi"]["lcd"]["pixels"] = msg.get("pixels")
-        asyncio.run_coroutine_threadsafe(
-            broadcast({"type": "lcd", "pixels": msg.get("pixels")}), loop)
+        if event == "set" and device == "gpio":
+            line = bounded_int(message, "line", minimum=0, maximum=4095)
+            configured_line(line, HARDWARE_CONFIG.output_lines, "GPIO output")
+            value = boolean_value(message, "value")
+            gpio_state = state["gpio"]
+            assert isinstance(gpio_state, dict)
+            leds = gpio_state["leds"]
+            assert isinstance(leds, dict)
+            if line in HARDWARE_CONFIG.led_lines:
+                definition = GPIO_BY_LINE[line]
+                active = definition.active_at_level(value)
+                leds[line] = active
+                _schedule_broadcast(
+                    {"type": "led", "line": line, "value": active}, loop
+                )
 
-    elif event == "set" and device == "oled":
-        state["i2c"]["ssd1306"]["framebuf"] = msg.get("framebuf")
-        asyncio.run_coroutine_threadsafe(
-            broadcast({"type": "oled", "framebuf": msg.get("framebuf")}), loop)
+        elif event == "set" and device == "i2c_range":
+            _require_device("vl53l0x")
+            range_mm = bounded_int(
+                message, "value", default=300, minimum=0, maximum=MAX_RANGE_MM
+            )
+            i2c_state = state["i2c"]
+            assert isinstance(i2c_state, dict)
+            sensor = i2c_state["vl53l0x"]
+            assert isinstance(sensor, dict)
+            sensor["range_mm"] = range_mm
+            _schedule_broadcast({"type": "range", "value": range_mm}, loop)
 
-    elif event == "set" and device == "ili9341":
-        width  = msg.get("width", 320)
-        height = msg.get("height", 240)
-        pixels = msg.get("pixels")
-        state["spi"]["ili9341"] = {"pixels": pixels, "width": width, "height": height}
-        asyncio.run_coroutine_threadsafe(
-            broadcast({"type": "ili9341", "pixels": pixels, "width": width, "height": height}),
-            loop)
+        elif event == "set" and device == "lcd":
+            _require_device("st7789")
+            pixels = _pixel_data(message, "pixels", expected_bytes=240 * 240 * 2)
+            spi_state = state["spi"]
+            assert isinstance(spi_state, dict)
+            lcd = spi_state["lcd"]
+            assert isinstance(lcd, dict)
+            lcd["pixels"] = pixels
+            _schedule_broadcast({"type": "lcd", "pixels": pixels}, loop)
 
-    elif msg.get("req") == "get" and device == "gpio":
-        line = msg.get("line")
-        val  = int(state["gpio"]["buttons"].get(line, False))
-        return json.dumps({"value": val}) + "\n"
+        elif event == "set" and device == "oled":
+            _require_device("ssd1306")
+            frame_buffer = _pixel_data(
+                message, "framebuf", expected_bytes=128 * 64 // 8
+            )
+            i2c_state = state["i2c"]
+            assert isinstance(i2c_state, dict)
+            oled = i2c_state["ssd1306"]
+            assert isinstance(oled, dict)
+            oled["framebuf"] = frame_buffer
+            _schedule_broadcast({"type": "oled", "framebuf": frame_buffer}, loop)
 
-    elif msg.get("req") == "get" and device == "gpio_out":
-        # Live re-read (not the cached/polled state) - used by cuse_spi_ili9341
-        # to sample the DC line synchronously before each SPI transfer.
-        line = msg.get("line")
-        val  = int(bool(_gpio_sim_value(line)))
-        return json.dumps({"value": val}) + "\n"
+        elif event == "set" and device == "ili9341":
+            _require_device("ili9341")
+            width = bounded_int(message, "width", default=320, minimum=1, maximum=2048)
+            height = bounded_int(
+                message, "height", default=240, minimum=1, maximum=2048
+            )
+            pixels = _pixel_data(
+                message,
+                "pixels",
+                expected_bytes=width * height * 2,
+            )
+            spi_state = state["spi"]
+            assert isinstance(spi_state, dict)
+            spi_state["ili9341"] = {
+                "pixels": pixels,
+                "width": width,
+                "height": height,
+            }
+            _schedule_broadcast(
+                {
+                    "type": "ili9341",
+                    "pixels": pixels,
+                    "width": width,
+                    "height": height,
+                },
+                loop,
+            )
 
-    elif msg.get("req") == "get" and device == "rfid":
-        rfid = state["spi"]["mfrc522"]
-        return json.dumps({
-            "present": bool(rfid.get("present")),
-            "uid":     rfid.get("uid") or "00:00:00:00",
-        }) + "\n"
+        elif message.get("req") == "get" and device == "gpio":
+            line = bounded_int(message, "line", minimum=0, maximum=4095)
+            configured_line(line, HARDWARE_CONFIG.input_lines, "GPIO input")
+            gpio_state = state["gpio"]
+            assert isinstance(gpio_state, dict)
+            buttons = gpio_state["buttons"]
+            assert isinstance(buttons, dict)
+            electrical_high = _gpio_sim_value(line)
+            if electrical_high is None and line in HARDWARE_CONFIG.button_lines:
+                definition = GPIO_BY_LINE[line]
+                pressed = bool(buttons.get(line))
+                electrical_high = definition.electrical_level_for(pressed)
+            if electrical_high is None:
+                electrical_high = _initial_gpio_input_level(GPIO_BY_LINE[line])
+            return json.dumps({"value": int(bool(electrical_high))}) + "\n"
 
-    elif event == "register":
-        print(f"[bridge] register {device} line={msg.get('line')} dir={msg.get('dir')}")
+        elif message.get("req") == "get" and device == "gpio_out":
+            line = bounded_int(message, "line", minimum=0, maximum=4095)
+            configured_line(line, HARDWARE_CONFIG.output_lines, "GPIO output")
+            value = _gpio_sim_value(line)
+            return json.dumps({"value": int(bool(value))}) + "\n"
 
+        elif message.get("req") == "get" and device == "rfid":
+            _require_device("mfrc522")
+            spi_state = state["spi"]
+            assert isinstance(spi_state, dict)
+            rfid = spi_state["mfrc522"]
+            assert isinstance(rfid, dict)
+            return (
+                json.dumps(
+                    {
+                        "present": bool(rfid.get("present")),
+                        "uid": rfid.get("uid") or "00:00:00:00",
+                    }
+                )
+                + "\n"
+            )
+
+        elif event == "register":
+            LOGGER.info(
+                "registered %s line=%s direction=%s",
+                device,
+                message.get("line"),
+                message.get("dir"),
+            )
+        else:
+            LOGGER.debug("ignored unsupported stub message: %s", raw[:200])
+            if expects_response:
+                raise RequestValidationError("unsupported stub request")
+
+    except RequestValidationError as exc:
+        LOGGER.warning("discarded invalid stub message: %s", exc)
+        if expects_response:
+            return json.dumps({"ok": False, "error": str(exc)}) + "\n"
     return None
 
 
-def unix_server_thread(loop):
-    Path(UNIX_SOCK).parent.mkdir(parents=True, exist_ok=True)
-    if os.path.exists(UNIX_SOCK):
-        os.remove(UNIX_SOCK)
+def _remove_stale_unix_socket(path: Path) -> None:
+    if not path.exists() and not path.is_symlink():
+        return
+    original = path.lstat()
+    if not stat.S_ISSOCK(original.st_mode):
+        raise RuntimeError(f"refusing to replace non-socket path: {path}")
 
-    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    srv.bind(UNIX_SOCK)
-    srv.listen(8)
-    os.chmod(UNIX_SOCK, 0o666)
-    print(f"[bridge] Unix socket listening: {UNIX_SOCK}")
-
-    while True:
-        conn, _ = srv.accept()
-        threading.Thread(target=handle_stub_conn,
-                         args=(conn, loop), daemon=True).start()
-
-
-def handle_stub_conn(conn, loop):
-    buf = ""
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.2)
+        try:
+            probe.connect(str(path))
+        except OSError as exc:
+            if exc.errno not in {errno.ECONNREFUSED, errno.ENOENT}:
+                raise RuntimeError(
+                    f"cannot inspect existing Unix socket {path}: {exc}"
+                ) from exc
+        else:
+            raise RuntimeError(f"another hardware bridge is already using {path}")
     try:
-        while True:
-            data = conn.recv(4096).decode()
-            if not data:
-                break
-            buf += data
-            while "\n" in buf:
-                line, buf = buf.split("\n", 1)
-                resp = handle_stub_message(line, loop)
-                if resp:
-                    conn.sendall(resp.encode())
-    except Exception:
-        pass
+        current = path.lstat()
+    except FileNotFoundError:
+        return
+    if (current.st_dev, current.st_ino) != (original.st_dev, original.st_ino):
+        raise RuntimeError(f"Unix socket changed while it was being inspected: {path}")
+    path.unlink()
+
+
+def _complete_future(future: asyncio.Future[None]) -> None:
+    if not future.done():
+        future.set_result(None)
+
+
+def _fail_future(future: asyncio.Future[None], error: BaseException) -> None:
+    if not future.done():
+        future.set_exception(error)
+
+
+def _run_stub_connection(
+    connection: socket.socket,
+    loop: asyncio.AbstractEventLoop,
+) -> None:
+    try:
+        handle_stub_connection(connection, loop)
     finally:
-        conn.close()
-
-# ------------------------------------------------------------------ #
-# HTTP server (serve panel/)                                            #
-# ------------------------------------------------------------------ #
-
-async def http_handler(request):
-    path = request.path.lstrip("/") or "index.html"
-    fpath = PANEL_DIR / path
-    if not fpath.exists():
-        return web.Response(status=404, text="Not found")
-    content_types = {
-        ".html": "text/html", ".css": "text/css",
-        ".js":   "application/javascript",
-    }
-    ct = content_types.get(fpath.suffix, "application/octet-stream")
-    return web.Response(body=fpath.read_bytes(), content_type=ct)
+        _stub_connection_slots.release()
 
 
-def _parse_json_or_query(request, body: dict | None = None) -> dict:
-    data = dict(request.query)
-    if body:
-        data.update(body)
+def unix_server_thread(
+    loop: asyncio.AbstractEventLoop,
+    ready: asyncio.Future[None],
+    stopped: asyncio.Future[None],
+) -> None:
+    socket_path = Path(UNIX_SOCKET_PATH)
+    server: socket.socket | None = None
+    started = False
+    try:
+        socket_path.parent.mkdir(parents=True, exist_ok=True)
+        _remove_stale_unix_socket(socket_path)
+
+        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        server.bind(str(socket_path))
+        server.listen(MAX_STUB_CONNECTIONS)
+        os.chmod(socket_path, 0o660)
+        LOGGER.info("Unix socket listening at %s", socket_path)
+        started = True
+        loop.call_soon_threadsafe(_complete_future, ready)
+
+        while True:
+            connection, _ = server.accept()
+            try:
+                _stub_connection_slots.acquire()
+                threading.Thread(
+                    target=_run_stub_connection,
+                    args=(connection, loop),
+                    daemon=True,
+                ).start()
+            except Exception:
+                connection.close()
+                _stub_connection_slots.release()
+                raise
+    except BaseException as exc:
+        target = stopped if started else ready
+        loop.call_soon_threadsafe(_fail_future, target, exc)
+    finally:
+        if server is not None:
+            server.close()
+
+
+def handle_stub_connection(
+    connection: socket.socket, loop: asyncio.AbstractEventLoop
+) -> None:
+    buffer = bytearray()
+    try:
+        # The stubs intentionally keep their connection open between requests.
+        # Limit only the initial handshake so idle clients cannot consume every
+        # worker slot without breaking those persistent connections.
+        connection.settimeout(FIRST_STUB_MESSAGE_TIMEOUT_SECONDS)
+        received_first_line = False
+        while True:
+            chunk = connection.recv(4096)
+            if not chunk:
+                break
+            buffer.extend(chunk)
+
+            while True:
+                newline = buffer.find(b"\n")
+                if newline < 0:
+                    break
+                raw_line = bytes(buffer[:newline])
+                del buffer[: newline + 1]
+                if len(raw_line) > MAX_STUB_LINE_BYTES:
+                    raise RequestValidationError("stub message exceeds the line limit")
+                try:
+                    decoded = raw_line.decode("utf-8")
+                except UnicodeDecodeError as exc:
+                    raise RequestValidationError("stub message is not UTF-8") from exc
+                if not received_first_line:
+                    received_first_line = True
+                    connection.settimeout(None)
+                response = handle_stub_message(decoded, loop)
+                if response:
+                    connection.sendall(response.encode("utf-8"))
+
+            if len(buffer) > MAX_STUB_LINE_BYTES:
+                raise RequestValidationError("stub message exceeds the line limit")
+    except RequestValidationError as exc:
+        LOGGER.warning("closing invalid stub connection: %s", exc)
+    except OSError as exc:
+        LOGGER.warning("stub connection failed: %s", exc)
+    except Exception:
+        LOGGER.exception("unexpected stub connection failure")
+    finally:
+        connection.close()
+
+
+# ---------------------------------------------------------------------------
+# HTTP JSON API and static panel
+# ---------------------------------------------------------------------------
+
+
+@web.middleware
+async def validation_error_middleware(request, handler):
+    try:
+        return await handler(request)
+    except RequestValidationError as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
+
+
+@web.middleware
+async def browser_access_middleware(request, handler):
+    if not browser_request_allowed(
+        request.headers.get("Host", ""),
+        request.headers.get("Origin"),
+        ALLOWED_HTTP_HOSTS,
+    ):
+        return web.json_response(
+            {"ok": False, "error": "bridge request host or origin is not allowed"},
+            status=403,
+        )
+    return await handler(request)
+
+
+async def _request_data(request: web.Request) -> dict[str, object]:
+    data: dict[str, object] = dict(request.query)
+    if not request.can_read_body:
+        return data
+
+    try:
+        raw_body = await request.text()
+    except (UnicodeError, LookupError) as exc:
+        raise RequestValidationError("request body must be valid text") from exc
+    if not raw_body.strip():
+        return data
+    body = parse_json_object(raw_body)
+    data.update(body)
     return data
 
 
-async def api_state(request):
+async def api_state(_request: web.Request) -> web.Response:
     return web.json_response(state)
 
 
-async def api_button(request):
-    body = await request.json() if request.can_read_body else {}
-    data = _parse_json_or_query(request, body)
-    line = int(data.get("line", 17))
-    value = bool(int(data.get("value", 1)))
-    await set_button(line, value)
-    return web.json_response({"ok": True, "line": line, "value": value})
+async def api_button(request: web.Request) -> web.Response:
+    data = await _request_data(request)
+    line = _button_line(data)
+    pressed = boolean_value(data, "value")
+    await set_button(line, pressed)
+    return web.json_response({"ok": True, "line": line, "value": pressed})
 
 
-async def api_button_press(request):
-    body = await request.json() if request.can_read_body else {}
-    data = _parse_json_or_query(request, body)
-    line = int(data.get("line", 17))
-    duration_ms = max(0, int(data.get("duration_ms", 150)))
+async def api_button_press(request: web.Request) -> web.Response:
+    data = await _request_data(request)
+    line = _button_line(data)
+    duration_ms = bounded_int(
+        data,
+        "duration_ms",
+        default=150,
+        minimum=0,
+        maximum=MAX_BUTTON_PRESS_MS,
+    )
     await press_button(line, duration_ms)
     return web.json_response({"ok": True, "line": line, "duration_ms": duration_ms})
 
 
-async def api_rfid_tap(request):
-    body = await request.json() if request.can_read_body else {}
-    data = _parse_json_or_query(request, body)
-    uid = data.get("uid", "04:AB:CD:EF:01:23")
+async def api_rfid_tap(request: web.Request) -> web.Response:
+    data = await _request_data(request)
+    _require_device("mfrc522")
+    uid = rfid_uid(data, DEFAULT_RFID_UID)
     await tap_rfid(uid)
     return web.json_response({"ok": True, "uid": uid, "present": True})
 
 
-async def api_rfid_remove(request):
+async def api_rfid_remove(_request: web.Request) -> web.Response:
+    _require_device("mfrc522")
     await remove_rfid()
     return web.json_response({"ok": True, "present": False})
 
 
-async def api_range(request):
-    body = await request.json() if request.can_read_body else {}
-    data = _parse_json_or_query(request, body)
-    mm = int(data.get("value", 300))
-    await set_range(mm)
-    return web.json_response({"ok": True, "value": mm})
+async def api_range(request: web.Request) -> web.Response:
+    data = await _request_data(request)
+    _require_device("vl53l0x")
+    range_mm = bounded_int(data, "value", default=300, minimum=0, maximum=MAX_RANGE_MM)
+    await set_range(range_mm)
+    return web.json_response({"ok": True, "value": range_mm})
 
 
-async def api_rotary_rotate(request):
-    body = await request.json() if request.can_read_body else {}
-    data = _parse_json_or_query(request, body)
-    direction = int(data.get("direction", 1))
+async def api_rotary_rotate(request: web.Request) -> web.Response:
+    data = await _request_data(request)
+    direction = _direction(data)
     await rotary_step(direction)
     return web.json_response({"ok": True, "direction": direction})
 
 
-async def api_rotary_press(request):
+async def api_rotary_press(_request: web.Request) -> web.Response:
     await rotary_press()
     return web.json_response({"ok": True})
 
-# ------------------------------------------------------------------ #
-# Main                                                                  #
-# ------------------------------------------------------------------ #
 
-async def main():
+async def panel_file_handler(request: web.Request) -> web.Response:
+    file_path = resolve_panel_file(PANEL_DIR, request.match_info.get("path_info", ""))
+    if file_path is None:
+        return web.Response(status=404, text="Not found")
+    return web.FileResponse(file_path)
+
+
+def create_application() -> web.Application:
+    application = web.Application(
+        middlewares=[browser_access_middleware, validation_error_middleware],
+        client_max_size=MAX_BROWSER_MESSAGE_BYTES,
+    )
+    application.router.add_get("/ws", websocket_handler)
+    application.router.add_get("/api/state", api_state)
+    application.router.add_post("/api/button", api_button)
+    application.router.add_post("/api/button/press", api_button_press)
+    application.router.add_post("/api/rfid/tap", api_rfid_tap)
+    application.router.add_post("/api/rfid/remove", api_rfid_remove)
+    application.router.add_post("/api/range", api_range)
+    application.router.add_post("/api/rotary/rotate", api_rotary_rotate)
+    application.router.add_post("/api/rotary/press", api_rotary_press)
+    application.router.add_get("/{path_info:.*}", panel_file_handler)
+    return application
+
+
+def _initial_gpio_input_level(definition: GpioLine) -> bool:
+    rotary = HARDWARE_CONFIG.rotary
+    rotary_phase_lines = {rotary.clock, rotary.data} if rotary else set()
+    if definition.line in rotary_phase_lines:
+        return True
+    if definition.role == "button":
+        return definition.electrical_level_for(False)
+    if definition.pull == "pull-up":
+        return True
+    if definition.pull == "pull-down":
+        return False
+    return definition.electrical_level_for(False)
+
+
+def initialise_gpio_inputs() -> None:
+    for definition in HARDWARE_CONFIG.gpio_lines:
+        if definition.direction != "input":
+            continue
+        _gpio_sim_set_level(definition.line, _initial_gpio_input_level(definition))
+
+
+async def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO, format="%(levelname)s %(name)s: %(message)s"
+    )
+    LOGGER.info("hardware configuration: %s", state["hardware"])
+
+    initialise_gpio_inputs()
     loop = asyncio.get_running_loop()
+    unix_ready = loop.create_future()
+    unix_stopped = loop.create_future()
+    threading.Thread(
+        target=unix_server_thread,
+        args=(loop, unix_ready, unix_stopped),
+        daemon=True,
+    ).start()
+    await unix_ready
+    output_poll_task = asyncio.create_task(poll_gpio_sim_outputs())
 
-    # KY-040 idles high (open switch, external pull-ups recommended by
-    # gar-stream-rx's wiring notes) - see rotary_step()/rotary_press().
-    for line in (ROTARY_CLK_LINE, ROTARY_DT_LINE, ROTARY_SW_LINE):
-        _gpio_sim_set_input(line, True)
-
-    # Unix socket server in background thread
-    threading.Thread(target=unix_server_thread, args=(loop,), daemon=True).start()
-    asyncio.create_task(poll_gpio_sim_outputs())
-
-    # WebSocket server
-    ws_server = await websockets.serve(ws_handler, "0.0.0.0", WS_PORT)
-    print(f"[bridge] WebSocket  ws://0.0.0.0:{WS_PORT}")
-
-    # HTTP server
-    app = web.Application()
-    app.router.add_route("GET",  "/api/state", api_state)
-    app.router.add_route("POST", "/api/button", api_button)
-    app.router.add_route("POST", "/api/button/press", api_button_press)
-    app.router.add_route("POST", "/api/rfid/tap", api_rfid_tap)
-    app.router.add_route("POST", "/api/rfid/remove", api_rfid_remove)
-    app.router.add_route("POST", "/api/range", api_range)
-    app.router.add_route("POST", "/api/rotary/rotate", api_rotary_rotate)
-    app.router.add_route("POST", "/api/rotary/press", api_rotary_press)
-    app.router.add_route("GET", "/{path_info:.*}", http_handler)
-    runner = web.AppRunner(app)
+    runner = web.AppRunner(create_application())
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", HTTP_PORT)
+    site = web.TCPSite(runner, HTTP_HOST, HTTP_PORT)
     await site.start()
-    print(f"[bridge] HTTP panel http://0.0.0.0:{HTTP_PORT}")
+    LOGGER.info("panel and WebSocket listening at http://%s:%s", HTTP_HOST, HTTP_PORT)
 
-    await asyncio.Future()  # run forever
+    try:
+        await unix_stopped
+    finally:
+        output_poll_task.cancel()
+        await runner.cleanup()
 
 
 if __name__ == "__main__":

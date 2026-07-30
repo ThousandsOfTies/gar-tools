@@ -1,0 +1,100 @@
+name: Check and build gar-tools
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check-and-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out gar-tools
+        uses: actions/checkout@v4
+
+      - name: Check out GaplessAgentRuntime contract source
+        uses: actions/checkout@v4
+        with:
+          repository: ThousandsOfTies/GaplessAgentRuntime
+          path: GaplessAgentRuntime
+
+      - name: Install native and ARM64 build dependencies
+        run: |
+          if ! grep -q '^Architectures:' /etc/apt/sources.list.d/ubuntu.sources; then
+            sudo sed -i '/^Types: deb$/a Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          sudo tee /etc/apt/sources.list.d/ubuntu-arm64.sources >/dev/null <<'EOF'
+          Types: deb
+          URIs: http://ports.ubuntu.com/ubuntu-ports/
+          Suites: noble noble-updates noble-backports noble-security
+          Components: main universe restricted multiverse
+          Architectures: arm64
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
+          sudo dpkg --add-architecture arm64
+          sudo apt-get update
+          sudo apt-get install --yes \
+            gcc \
+            gcc-aarch64-linux-gnu \
+            libfuse3-dev \
+            libfuse3-dev:arm64 \
+            file \
+            python3
+
+      - name: Run repository checks
+        env:
+          GAR_RUNTIME_ROOT: ${{ github.workspace }}/GaplessAgentRuntime
+        run: make check HOSTCC=gcc PYTHON=python3
+
+      - name: Build Linux simulation image
+        run: docker build --tag gar-linux-device:ci targets/linux-device
+
+      - name: Verify bundled web bridge environment
+        run: |
+          docker run --rm \
+            gar-linux-device:ci \
+            /usr/local/lib/gar/venv/bin/python3 \
+            -c "from importlib.metadata import version; assert version('aiohttp') == '3.14.2'"
+
+      - name: Smoke-test live web bridge in the simulation image
+        run: |
+          docker run --rm \
+            --env PYTHONDONTWRITEBYTECODE=1 \
+            --volume "$PWD:/workspace:ro" \
+            --workdir /workspace \
+            gar-linux-device:ci \
+            /usr/local/lib/gar/venv/bin/python3 \
+              targets/linux-device/runtime/web-bridge/tests/smoke_bridge.py \
+              targets/linux-device/hardware \
+              targets/luckfox-rv1106/hardware
+
+      - name: Build native Linux runtime
+        run: make linux-runtime CC=gcc
+
+      - name: Verify native Linux runtime architecture
+        run: |
+          file targets/linux-device/runtime/spi-stub/cuse_spi
+          file targets/linux-device/runtime/i2c-stub/cuse_i2c
+          file targets/linux-device/runtime/ili9341-stub/cuse_spi_ili9341
+          file targets/linux-device/runtime/spi-stub/cuse_spi | grep --quiet 'x86-64'
+          file targets/linux-device/runtime/i2c-stub/cuse_i2c | grep --quiet 'x86-64'
+          file targets/linux-device/runtime/ili9341-stub/cuse_spi_ili9341 | grep --quiet 'x86-64'
+
+      - name: Clean native outputs
+        run: make clean
+
+      - name: Cross-build ARM64 Linux runtime
+        run: make linux-runtime CC=aarch64-linux-gnu-gcc
+
+      - name: Verify ARM64 Linux runtime architecture
+        run: |
+          file targets/linux-device/runtime/spi-stub/cuse_spi
+          file targets/linux-device/runtime/i2c-stub/cuse_i2c
+          file targets/linux-device/runtime/ili9341-stub/cuse_spi_ili9341
+          file targets/linux-device/runtime/spi-stub/cuse_spi | grep --quiet 'ARM aarch64'
+          file targets/linux-device/runtime/i2c-stub/cuse_i2c | grep --quiet 'ARM aarch64'
+          file targets/linux-device/runtime/ili9341-stub/cuse_spi_ili9341 | grep --quiet 'ARM aarch64'

@@ -10,8 +10,9 @@ grows the real simulation backend.
 ## Build
 
 ```bash
-cmake -S targets/esp32/fake-idf -B /tmp/gar-fake-idf-build
-cmake --build /tmp/gar-fake-idf-build
+FAKE_IDF_BUILD_DIR="$(mktemp -d)"
+cmake -S targets/esp32/fake-idf -B "$FAKE_IDF_BUILD_DIR"
+cmake --build "$FAKE_IDF_BUILD_DIR"
 ```
 
 ## Link Shape
@@ -19,7 +20,7 @@ cmake --build /tmp/gar-fake-idf-build
 ```bash
 cc app.c \
   -Itargets/esp32/fake-idf/include \
-  /tmp/gar-fake-idf-build/libgar_fake_idf.a
+  "$FAKE_IDF_BUILD_DIR/libgar_fake_idf.a"
 ```
 
 ## Current Surface

@@ -18,10 +18,12 @@ if [[ ! -x "$app_bin" ]]; then
 fi
 
 required_nodes=(
-  "/dev/i2c-3"
-  "/dev/spidev0.0"
+  "/dev/${GAR_LUCKFOX_SPI_DEV:-spidev0.0}"
 )
 
+if [[ "${GAR_REQUIRE_I2C:-0}" == "1" ]]; then
+  required_nodes+=("/dev/${GAR_LUCKFOX_I2C_DEV:-i2c-3}")
+fi
 if [[ "${GAR_REQUIRE_VIDEO:-0}" == "1" ]]; then
   required_nodes+=("/dev/video0")
 fi
@@ -29,7 +31,7 @@ if [[ "${GAR_REQUIRE_FB:-0}" == "1" ]]; then
   required_nodes+=("/dev/fb0")
 fi
 if [[ "${GAR_REQUIRE_GPIO:-0}" == "1" ]]; then
-  required_nodes+=("/dev/gpiochip0")
+  required_nodes+=("/dev/${GAR_LUCKFOX_GPIO_DEV:-gpiochip0}")
 fi
 
 missing=0

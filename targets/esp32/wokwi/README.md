@@ -1,10 +1,10 @@
 # ESP32 Wokwi Backend
 
-GAR-owned Wokwi simulation templates for ESP32/M5Stack-class targets.
+Reusable Wokwi simulation templates for ESP32/M5Stack-class targets.
 
 The orchestration provider lives in `GaplessAgentRuntime`. This directory keeps
-target-specific wiring, build templates, local simulator shims, and smoke
-scenarios. It does not own application source code.
+target-specific wiring, build templates, and local simulator shims. It owns
+neither application source nor built firmware.
 
 ## Ownership Model
 
@@ -12,31 +12,38 @@ scenarios. It does not own application source code.
 gar-tools/
   targets/esp32/wokwi/m5stackc/      # template source of truth
 
-gar-vibe-ui/
-  vibe-remote/m5stickc-client/src/   # app source of truth
+product workspace/
+  <application>/src/                 # app source of truth
+  scripts/product-sim-build.sh       # generate, build, and package
 
-GaplessAgentRuntime/
-  .gar/wokwi/m5stackc/               # generated Wokwi workspace
+selected runtime workspace/
+  .gar/wokwi/<project>/               # deployed runnable project
 ```
 
-GAR renders the template and the app source path into the generated Wokwi
-workspace. The workspace can then be opened by the VS Code Wokwi extension or
-run with `wokwi-cli`.
+The product build hook combines this template with the product's application
+source, builds the firmware, and writes a `deploy.app` artifact. `gar sim app
+deploy` materializes that artifact into the selected runtime workspace. The
+deployed project can then be opened by the VS Code Wokwi extension or run with
+`gar sim runtime start`.
+
+`gar setup` only selects and installs the backend. `gar sim runtime start` only
+launches an already deployed project; neither command invokes the workspace
+generator.
 
 ## M5StackC Template
 
-`m5stackc/` is copied into `GaplessAgentRuntime/.gar/wokwi/m5stackc` by
-`gar setup` / `gar sim runtime start`.
+`m5stackc/` is consumed by a product build hook such as
+`scripts/product-sim-build.sh`.
 
 It contains:
 
 - `diagram.json` — Wokwi wiring for ESP32 DevKit, SPI LCD, BtnA/BtnB/BtnP, LED.
-- `platformio.ini.template` — rendered by GAR with `src_dir` pointing at the app repository.
-- `wokwi.toml.template` — rendered by GAR so firmware/ELF paths can be overridden.
+- `platformio.ini.template` — rendered by the generator with `src_dir` pointing at the app repository.
+- `wokwi.toml.template` — rendered by the generator so firmware/ELF paths can be overridden.
 - `lib/M5Unified/src/M5Unified.h` — Wokwi-side M5Unified compatibility shim.
 - `scripts/env_flags.py` — local `.env.local` to PlatformIO build flags bridge.
-- `button.test.yaml` — Wokwi scenario for button press smoke tests.
 
-Generated artifacts such as `platformio.ini`, `wokwi.toml`, `.pio/`,
-screenshots, and serial logs stay in the workspace under `.gar/` and are not
-committed here.
+Generated files such as `platformio.ini`, `wokwi.toml`, `.pio/`, screenshots,
+and serial logs are not committed here. This template currently ships no Wokwi
+CLI scenario; a product that needs automated interaction owns and packages its
+scenario explicitly.

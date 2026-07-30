@@ -3,8 +3,8 @@
 Default hardware definition CSV files for the Linux device / RasPi-compatible
 target.
 
-`GaplessAgentRuntime` copies these files into a local project `hardware/`
-directory with:
+From a registered product workspace, `GaplessAgentRuntime` copies these files
+into that project's `hardware/` directory with:
 
 ```bash
 gar hw init

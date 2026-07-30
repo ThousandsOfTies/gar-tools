@@ -3,10 +3,9 @@ using sysbus
 :description: Minimal M5Status firmware smoke target for the GAR Renode path.
 #
 # This uses Renode's verified Xtensa sample-controller platform and upstream
-# Zephyr hello-world ELF as the first executable firmware proof. It is not an
-# ESP32/M5Stack board boot yet; see ../ROADMAP.md for the migration path.
-
-$m5status_tiny_elf?=@https://dl.antmicro.com/projects/renode/xtensa-sample-controller-zephyr-hello-world.elf-s_293544-4be60f8a3891e70c30e1e8a471df4ad12ab08144
+# Zephyr hello-world ELF as the first executable firmware proof. run.py injects
+# the local ELF path only after checking its pinned SHA-256 digest. This is not
+# an ESP32/M5Stack board boot yet; see ../ROADMAP.md for the migration path.
 
 mach create "m5status-tiny"
 machine LoadPlatformDescription @platforms/cpus/xtensa-sample-controller.repl
@@ -19,4 +18,3 @@ macro reset
     cpu PC 0x50000000
 """
 runMacro $reset
-

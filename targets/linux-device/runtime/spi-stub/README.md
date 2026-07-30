@@ -1,20 +1,20 @@
 # cuse_spi — CUSE SPI stub (MFRC-522 sim)
 
 LD_PRELOAD の `spi_shim.so` を置き換える、CUSE ベースの SPI スタブです。
-本物の `/dev/spidev0.0` を userspace で生やし、未改変の `~/sensor_demo`
+本物の `/dev/spidev0.0` を userspace で生やし、未改変の `sensor_demo`
 バイナリがそのまま MFRC-522（RFID リーダ）を読めるようにします。
 
 `i2c-stub/cuse_i2c`（I2C）と同じ構造で、デバイス固有のレジスタ模擬は
 `mfrc522_sim.c` に分離しています。カード提示状態は web bridge
-（`GAR_HW_SIM_SOCK` または `GAR_RUNTIME_DIR/hw_sim.sock`）から取得するので、`gar sim io set --device rfid --uid <UID>` でタップを
-注入できます。
+（`GAR_HW_SIM_SOCK` または `GAR_RUNTIME_DIR/hw_sim.sock`）から取得するので、
+`gar sim io set --device rfid --uid <UID>` でタップを注入できます。
 
 ## なぜ CUSE か（spi_shim との違い）
 
 `spi_shim.so` は `LD_PRELOAD` でアプリ内の `open()/ioctl()` を横取りする方式で、
 アプリの起動コマンドに `LD_PRELOAD=...` を足す必要がありました。CUSE 版は
 カーネルが spidev の ioctl を `/dev/fuse` 経由でこのプロセスに配送するため、
-アプリ側は本番（RasPi5）と同じ `~/sensor_demo` 一発で済みます。差し替えの
+アプリ側は本番（RasPi5）と同じ`./sensor_demo`一発で済みます。差し替えの
 責務をアプリから Gapless Agent Runtime runtime 側へ閉じ込めるのが狙いです。
 
 ## 対応 ioctl
@@ -40,19 +40,26 @@ ATQA・UID を返し、UID は bridge から取得したカードのものを使
 
 ## ビルド
 
-**ビルドは Codespaces で行う**（鉄則）。EC2/RasPi5 上では `make` しない —
-それらは実行専用ターゲットで、将来はツールチェーンもシェルも無い前提。
+通常は選択済みのBuildEnvironmentでGARにbuildさせます。
 
 ```bash
-# Codespaces: aarch64 cross-build（EC2 Graviton / RasPi5 と同じ ABI）
-make CC=aarch64-linux-gnu-gcc
-
-# x86_64（CI / Codespaces 内での構文確認用）
-make
+gar sim runtime build
+gar sim runtime deploy
 ```
 
-`libfuse3-dev`（`/usr/include/fuse3`）が必要。成果物 `cuse_spi` は
-WSL 経由でターゲットへ deploy し、ターゲットでは**起動のみ**行う。
+componentを単独で調査するときだけ、その環境に合うcompilerを明示してMakefileを
+利用します。simulation hostや実機は実行先であり、build先ではありません。
+
+```bash
+# aarch64 simulation host向けcross build
+make -C targets/linux-device/runtime/spi-stub CC=aarch64-linux-gnu-gcc
+
+# local host向け
+make -C targets/linux-device/runtime/spi-stub CC=gcc
+```
+
+`libfuse3-dev`（`/usr/include/fuse3`）が必要です。GARは生成したruntime
+artifactを`gar sim runtime deploy`で選択済みsimulation hostへ配置します。
 
 ## 起動
 
@@ -61,17 +68,17 @@ WSL 経由でターゲットへ deploy し、ターゲットでは**起動のみ
 sudo ./cuse_spi -f --devname=spidev0.0
 ```
 
-`-f` は foreground 実行。バックグラウンド常駐は `gar sim start` に組み込みます
-（`cuse_i2c` と同様）。起動後は `chmod 666 /dev/spidev0.0` でアプリから読める
-ようにします。
+`-f`はforeground実行です。通常の常駐起動とdevice nodeのpermission設定は
+`gar sim runtime start`が担当します。
 
 ## 動作確認の受け入れ基準
 
 「`/dev/spidev0.0` が生えた」「ioctl が通った」だけでは done にしません。
 
-1. `gar sim start` で `cuse_spi` が常駐し `/dev/spidev0.0` が見える
-2. `~/sensor_demo`（LD_PRELOAD なし）が VersionReg=0x92 を読めて初期化成功
-3. `gar sim rfid tap 04:AB:CD:EF:01:23` 後に `sensor_demo` が UID を表示する
-4. `gar sim rfid remove` でカード無し挙動に戻る
+1. `gar sim runtime start`で`cuse_spi`が常駐し、`/dev/spidev0.0`が見える
+2. `sensor_demo`（LD_PRELOADなし）がVersionReg=0x92を読んで初期化に成功する
+3. `gar sim io set --device rfid --uid 04:AB:CD:EF:01:23`の後にUIDが表示される
+4. `gar sim io clear --device rfid`でカード無しの挙動に戻る
+5. `gar sim runtime diag --json`がruntime全体を正常と判定する
 
 ここまで確認できて初めて S4 完了です。
