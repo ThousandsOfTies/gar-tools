@@ -846,7 +846,9 @@ async def api_rotary_press(_request: web.Request) -> web.Response:
 def _camera_pipeline_command() -> tuple[str, ...]:
     width = os.environ.get("GAR_CAMERA_WIDTH", "640")
     height = os.environ.get("GAR_CAMERA_HEIGHT", "480")
-    fps = os.environ.get("GAR_CAMERA_FPS", "15")
+    # v4l2loopback defaults to 30 fps. videorate duplicates the browser's
+    # 15 fps input so the capture side can negotiate the device default.
+    fps = os.environ.get("GAR_CAMERA_FPS", "30")
     device = os.environ.get("GAR_CAMERA_DEVICE", "/dev/video0")
     return (
         "gst-launch-1.0",
