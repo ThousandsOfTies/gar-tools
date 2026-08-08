@@ -41,6 +41,11 @@ LOGGER = logging.getLogger("gar.hardware_bridge")
 HTTP_HOST = os.environ.get("GAR_BRIDGE_HOST", "127.0.0.1")
 HTTP_PORT = int(os.environ.get("GAR_BRIDGE_PORT", "8080"))
 PANEL_DIR = Path(__file__).parent / "panel"
+COMPONENTS_DIR = Path(__file__).parent / "components"
+# Application artifacts select their screen by writing an absolute directory
+# here.  Reading it for each request deliberately makes `gar sim app deploy`
+# switch a screen without restarting the bridge or the simulated hardware.
+PANEL_DIR_CONFIG = Path("/etc/gar/panel-dir")
 
 
 def _allowed_http_hosts() -> frozenset[str]:
@@ -837,10 +842,31 @@ async def api_rotary_press(_request: web.Request) -> web.Response:
 
 
 async def panel_file_handler(request: web.Request) -> web.Response:
-    file_path = resolve_panel_file(PANEL_DIR, request.match_info.get("path_info", ""))
+    request_path = request.match_info.get("path_info", "")
+    if request_path.startswith("components/"):
+        file_path = resolve_panel_file(COMPONENTS_DIR, request_path.removeprefix("components/"))
+    else:
+        file_path = resolve_panel_file(_active_panel_dir(), request_path)
     if file_path is None:
         return web.Response(status=404, text="Not found")
     return web.FileResponse(file_path)
+
+
+def _active_panel_dir() -> Path:
+    """Return the application-selected panel, falling back to the generic one.
+
+    The configuration file is an intentionally tiny deployment contract: its
+    sole line is an absolute directory that contains an `index.html`.
+    Invalid, removed, or partial application deployments keep the bridge's
+    built-in diagnostic panel available.
+    """
+    try:
+        configured = Path(PANEL_DIR_CONFIG.read_text(encoding="utf-8").strip())
+    except OSError:
+        return PANEL_DIR
+    if not configured.is_absolute() or not configured.is_dir():
+        return PANEL_DIR
+    return configured
 
 
 def create_application() -> web.Application:
