@@ -62,6 +62,14 @@ static void spi_release(fuse_req_t req, struct fuse_file_info *fi) {
     fuse_reply_err(req, 0);
 }
 
+static void spi_write(fuse_req_t req, const char *buf, size_t size, off_t off,
+                      struct fuse_file_info *fi) {
+    (void)off;
+    (void)fi;
+    ili9341_sim_transfer((const uint8_t *)buf, NULL, size);
+    fuse_reply_write(req, size);
+}
+
 /* ------------------------------------------------------------------ */
 /* Fixed-size scalar ioctls (RD_* / WR_*)                              */
 /* ------------------------------------------------------------------ */
@@ -239,6 +247,7 @@ static void spi_ioctl(fuse_req_t req, int cmd, void *arg,
 static const struct cuse_lowlevel_ops spi_clops = {
     .open    = spi_open,
     .release = spi_release,
+    .write   = spi_write,
     .ioctl   = spi_ioctl,
 };
 

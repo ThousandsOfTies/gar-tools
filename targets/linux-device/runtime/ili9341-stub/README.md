@@ -28,6 +28,7 @@ web bridgeが共有するため、個別指定は不要です。
 
 | ioctl | 動作 |
 |---|---|
+| `write(2)` | `spidev.SpiDev.writebytes()` の送信データを処理 |
 | `SPI_IOC_RD/WR_MODE` | 受理（値を保持して読み返す） |
 | `SPI_IOC_RD/WR_LSB_FIRST` | 受理 |
 | `SPI_IOC_RD/WR_BITS_PER_WORD` | 受理 |
