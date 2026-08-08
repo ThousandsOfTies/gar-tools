@@ -40,10 +40,11 @@
 #define MAX_W 320
 #define MAX_H 240
 
-/* Push at most this often, regardless of how many SPI chunks arrive - a
- * full-screen blit() is split into ~4KB chunks by ili9341.py, and pushing a
- * ~150KB base64 frame on every chunk would flood the bridge/websocket. */
-#define PUSH_MIN_INTERVAL_S 0.2
+/* Push at most this often.  A full-screen blit() is split into ~4KB chunks
+ * by ili9341.py, but the bridge must only receive a completed RAM window:
+ * publishing after the first chunk makes almost the whole virtual panel stay
+ * on the previous frame and looks like a frozen display. */
+#define PUSH_MIN_INTERVAL_S 0.1
 
 static uint8_t  framebuf[MAX_W * MAX_H * 2];
 static uint16_t panel_w = MAX_W, panel_h = MAX_H;
@@ -54,6 +55,7 @@ static int      cmd_arg_len = 0;
 
 static uint16_t win_x0, win_y0, win_x1, win_y1;
 static uint16_t cur_x, cur_y;
+static size_t ramwr_pixels_remaining;
 
 static int      have_hi_byte = 0;
 static uint8_t  hi_byte = 0;
@@ -202,6 +204,7 @@ static void reset_window(void) {
     win_x1 = panel_w - 1; win_y1 = panel_h - 1;
     cur_x = 0; cur_y = 0;
     have_hi_byte = 0;
+    ramwr_pixels_remaining = 0;
 }
 
 static void handle_command_byte(uint8_t cmd) {
@@ -217,6 +220,8 @@ static void handle_command_byte(uint8_t cmd) {
         cur_x = win_x0;
         cur_y = win_y0;
         have_hi_byte = 0;
+        ramwr_pixels_remaining =
+            (size_t)(win_x1 - win_x0 + 1) * (size_t)(win_y1 - win_y0 + 1);
         break;
     default:
         active_cmd = 0; /* data bytes for unhandled commands are ignored */
@@ -271,14 +276,25 @@ static void handle_data_bytes(const uint8_t *data, size_t len) {
                 }
             }
 
+            int ramwr_complete = 0;
+            if (ramwr_pixels_remaining > 0) {
+                ramwr_pixels_remaining--;
+                ramwr_complete = ramwr_pixels_remaining == 0;
+            }
+
             cur_x++;
             if (cur_x > win_x1) {
                 cur_x = win_x0;
                 cur_y++;
                 if (cur_y > win_y1) cur_y = win_y0;
             }
+
+            /* Send only after the complete SPI RAM window is populated.
+             * For the normal video path this is exactly one 320x240 frame. */
+            if (ramwr_complete) {
+                push_framebuffer();
+            }
         }
-        push_framebuffer();
         break;
 
     default:
