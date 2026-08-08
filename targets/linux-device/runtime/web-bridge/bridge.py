@@ -865,7 +865,7 @@ def _camera_pipeline_command() -> tuple[str, ...]:
         "!",
         "videorate",
         "!",
-        f"video/x-raw,format=BGRx,width={width},height={height},framerate={fps}/1",
+        f"video/x-raw,format=YUY2,width={width},height={height},framerate={fps}/1",
         "!",
         "v4l2sink",
         f"device={device}",
