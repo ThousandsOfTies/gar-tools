@@ -4,29 +4,58 @@ class GarVideoTransmitter extends HTMLElement {
   #socket; #peer; #stream;
 
   connectedCallback() {
-    this.innerHTML = `<section><span class="label">PC CAMERA → WEBRTC</span><video autoplay muted playsinline></video><div><button>Start camera</button><output>Camera is stopped</output></div></section>`;
+    this.innerHTML = `<section><span class="label">PC CAMERA → WEBRTC</span><video autoplay muted playsinline></video><div class="camera-controls"><select aria-label="Camera"><option value="">Default camera</option></select><button>Start camera</button></div><output>Camera is stopped</output></section>`;
     this.querySelector("button").addEventListener("click", () => this.start());
+    this.querySelector("select").addEventListener("change", () => { if (this.#stream) this.start(); });
+    navigator.mediaDevices?.addEventListener("devicechange", () => this.#refreshCameras());
+    this.#refreshCameras();
   }
 
   async start() {
     const button = this.querySelector("button");
     button.disabled = true;
     try {
-      this.#stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+      this.#stream?.getTracks().forEach((track) => track.stop());
+      this.#peer?.close();
+      this.#socket?.close();
+      const deviceId = this.querySelector("select").value;
+      this.#stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+        },
+        audio: false,
+      });
       this.querySelector("video").srcObject = this.#stream;
+      await this.#refreshCameras(this.#stream.getVideoTracks()[0]?.getSettings().deviceId);
       this.#setStatus("Waiting for Rx…");
       this.#connectSignal();
+      button.textContent = "Restart camera";
+      button.disabled = false;
     } catch (error) {
       this.#setStatus(`Camera error: ${error.message}`);
       button.disabled = false;
     }
   }
 
+  async #refreshCameras(selectedId = this.querySelector("select").value) {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const cameras = (await navigator.mediaDevices.enumerateDevices()).filter(({ kind }) => kind === "videoinput");
+    const select = this.querySelector("select");
+    select.replaceChildren(new Option("Default camera", ""));
+    cameras.forEach((camera, index) => select.add(new Option(camera.label || `Camera ${index + 1}`, camera.deviceId)));
+    if ([...select.options].some(({ value }) => value === selectedId)) select.value = selectedId;
+  }
+
   #connectSignal() {
     this.#socket = new WebSocket(this.getAttribute("signal-url") || SIGNAL_URL);
     this.#socket.addEventListener("open", () => this.#send({ type: "register", session: "garstream", role: "tx" }));
     this.#socket.addEventListener("message", ({ data }) => this.#signal(JSON.parse(data)));
-    this.#socket.addEventListener("close", () => this.#setStatus("Signal connection closed"));
+    const activeSocket = this.#socket;
+    this.#socket.addEventListener("close", () => {
+      if (this.#socket === activeSocket && this.#stream) this.#setStatus("Signal connection closed");
+    });
   }
 
   async #signal(message) {

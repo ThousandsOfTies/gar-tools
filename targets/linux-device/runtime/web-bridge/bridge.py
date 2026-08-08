@@ -922,7 +922,7 @@ async def panel_file_handler(request: web.Request) -> web.Response:
         file_path = resolve_panel_file(_active_panel_dir(), request_path)
     if file_path is None:
         return web.Response(status=404, text="Not found")
-    return web.FileResponse(file_path)
+    return web.FileResponse(file_path, headers={"Cache-Control": "no-store"})
 
 
 def _active_panel_dir() -> Path:
