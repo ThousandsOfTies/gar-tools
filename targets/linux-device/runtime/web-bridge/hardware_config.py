@@ -293,7 +293,7 @@ def _display_dc_definition(
 
 def _device_drivers(hardware_dir: Path) -> tuple[str, ...]:
     drivers: set[str] = set()
-    for filename in ("i2c.csv", "spi.csv"):
+    for filename in ("i2c.csv", "spi.csv", "video.csv"):
         path = hardware_dir / filename
         if not path.is_file():
             continue
