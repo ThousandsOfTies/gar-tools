@@ -18,7 +18,14 @@ class GarVideoReceiver extends HTMLElement {
       if (this.#peer) this.#peer.close();
       this.#peer = new RTCPeerConnection();
       this.#peer.addEventListener("icecandidate", ({ candidate }) => { if (candidate) this.#send({ type: "signal", data: { candidate } }); });
-      this.#peer.addEventListener("track", ({ streams }) => { this.querySelector("video").srcObject = streams[0]; this.#setStatus("Receiving Tx camera"); });
+      this.#peer.addEventListener("track", ({ track, streams }) => {
+        const stream = streams[0] || new MediaStream([track]);
+        this.querySelector("video").srcObject = stream;
+        window.dispatchEvent(new CustomEvent("gar-media-stream", {
+          detail: { source: "garstream", stream },
+        }));
+        this.#setStatus("Receiving Tx camera");
+      });
       await this.#peer.setRemoteDescription(data.description);
       const answer = await this.#peer.createAnswer();
       await this.#peer.setLocalDescription(answer);
