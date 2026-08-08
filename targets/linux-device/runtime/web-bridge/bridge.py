@@ -20,6 +20,7 @@ import stat
 import threading
 from pathlib import Path
 from typing import Mapping
+from urllib.parse import urlsplit
 
 from aiohttp import WSMsgType, web
 
@@ -109,6 +110,7 @@ state: dict[str, object] = {
 }
 
 websocket_clients: set[web.WebSocketResponse] = set()
+media_signal_clients: dict[str, dict[str, set[web.WebSocketResponse]]] = {}
 _button_press_tokens: dict[int, object] = {}
 _rotary_lock = asyncio.Lock()
 _stub_connection_slots = threading.BoundedSemaphore(MAX_STUB_CONNECTIONS)
@@ -753,16 +755,36 @@ async def validation_error_middleware(request, handler):
 
 @web.middleware
 async def browser_access_middleware(request, handler):
-    if not browser_request_allowed(
+    allowed = browser_request_allowed(
         request.headers.get("Host", ""),
         request.headers.get("Origin"),
         ALLOWED_HTTP_HOSTS,
-    ):
+    )
+    if not allowed and not _media_signal_origin_allowed(request):
         return web.json_response(
             {"ok": False, "error": "bridge request host or origin is not allowed"},
             status=403,
         )
     return await handler(request)
+
+
+def _media_signal_origin_allowed(request: web.Request) -> bool:
+    """Allow only local Tx/Rx panels to signal through the Rx bridge.
+
+    The hardware API remains same-origin.  WebRTC signalling alone needs to
+    cross from the Tx panel (normally :8081) to the Rx panel (:8080), both of
+    which are loopback-only SSH forwards on the developer machine.
+    """
+    if request.path != "/media-signal/ws":
+        return False
+    if not browser_request_allowed(request.headers.get("Host", ""), None, ALLOWED_HTTP_HOSTS):
+        return False
+    try:
+        origin = urlsplit(request.headers.get("Origin", ""))
+        origin.port
+    except ValueError:
+        return False
+    return origin.scheme in {"http", "https"} and origin.hostname in {"127.0.0.1", "localhost", "::1"}
 
 
 async def _request_data(request: web.Request) -> dict[str, object]:
@@ -841,6 +863,57 @@ async def api_rotary_press(_request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
+def _signal_registration(message: object) -> tuple[str, str]:
+    if not isinstance(message, dict):
+        raise RequestValidationError("media signal registration must be an object")
+    session = message.get("session")
+    role = message.get("role")
+    if not isinstance(session, str) or not session or len(session) > 64 or not session.replace("-", "").replace("_", "").isalnum():
+        raise RequestValidationError("media signal session is invalid")
+    if role not in {"tx", "rx"}:
+        raise RequestValidationError("media signal role must be tx or rx")
+    return session, role
+
+
+async def media_signal_websocket(request: web.Request) -> web.WebSocketResponse:
+    """Relay WebRTC offer/answer/ICE messages between one Tx and one Rx panel."""
+    socket = web.WebSocketResponse(max_msg_size=MAX_BROWSER_MESSAGE_BYTES)
+    await socket.prepare(request)
+    session: str | None = None
+    role: str | None = None
+    try:
+        async for incoming in socket:
+            if incoming.type != WSMsgType.TEXT:
+                continue
+            message = parse_json_object(incoming.data)
+            if session is None:
+                if message.get("type") != "register":
+                    raise RequestValidationError("register before sending media signals")
+                session, role = _signal_registration(message)
+                peers = media_signal_clients.setdefault(session, {"tx": set(), "rx": set()})
+                peers[role].add(socket)
+                if peers["tx"] and peers["rx"]:
+                    for peer in (*peers["tx"], *peers["rx"]):
+                        await peer.send_json({"type": "peer-ready"})
+                continue
+            if message.get("type") != "signal" or not isinstance(message.get("data"), dict):
+                raise RequestValidationError("media signal must contain an object data field")
+            assert role is not None
+            for peer in tuple(media_signal_clients[session]["rx" if role == "tx" else "tx"]):
+                if not peer.closed:
+                    await peer.send_json({"type": "signal", "data": message["data"]})
+    except RequestValidationError as exc:
+        await socket.send_json({"type": "error", "error": str(exc)})
+    finally:
+        if session is not None and role is not None:
+            peers = media_signal_clients.get(session)
+            if peers is not None:
+                peers[role].discard(socket)
+                if not peers["tx"] and not peers["rx"]:
+                    media_signal_clients.pop(session, None)
+    return socket
+
+
 async def panel_file_handler(request: web.Request) -> web.Response:
     request_path = request.match_info.get("path_info", "")
     if request_path.startswith("components/"):
@@ -883,6 +956,7 @@ def create_application() -> web.Application:
     application.router.add_post("/api/range", api_range)
     application.router.add_post("/api/rotary/rotate", api_rotary_rotate)
     application.router.add_post("/api/rotary/press", api_rotary_press)
+    application.router.add_get("/media-signal/ws", media_signal_websocket)
     application.router.add_get("/{path_info:.*}", panel_file_handler)
     return application
 
