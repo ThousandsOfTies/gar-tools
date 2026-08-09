@@ -1,0 +1,23 @@
+[Unit]
+Description=GAR application %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gar
+Group=gar
+SupplementaryGroups=gpio spi video i2c
+EnvironmentFile=-/etc/gar/%i.env
+WorkingDirectory=/opt/gar/apps/%i
+ExecStart=/opt/gar/apps/%i/run
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

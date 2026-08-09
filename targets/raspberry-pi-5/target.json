@@ -1,0 +1,22 @@
+{
+  "id": "raspberry-pi-5",
+  "displayName": "Raspberry Pi 5 / Raspberry Pi OS",
+  "description": "Raspberry Pi 5 physical target running Raspberry Pi OS with systemd, real GPIO/SPI/video devices, and SSH deployment.",
+  "toolsRoot": "targets/raspberry-pi-5",
+  "defaultBackends": {
+    "codespace": "local",
+    "simulator": "ssh_remote",
+    "target": "ssh_scp"
+  },
+  "backendNotes": {
+    "simulator": "Use the linux-device runtime on an ARM64 SSH simulation host.",
+    "target": "The physical target uses Raspberry Pi OS devices directly; simulation stubs are never installed.",
+    "prepare": "Run gar target prepare once to install the constrained deploy helper and gar service account."
+  },
+  "provisioning": {
+    "ssh_scp": {
+      "type": "ssh-script",
+      "path": "provisioning/raspberry-pi-os-systemd"
+    }
+  }
+}

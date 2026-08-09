@@ -10,6 +10,7 @@ scriptではなく、`GaplessAgentRuntime`の`gar` CLIです。
 - `targets/esp32/`: ESP32/M5Stack向けWokwi、QEMU、Renode、実機probe
 - `targets/luckfox-rv1106/`: Luckfox Pico Plus/Pro/Max向けhardware定義、
   application雛形、simulation helper
+- `targets/raspberry-pi-5/`: Raspberry Pi OS実機とSSH/systemd provisioning recipe
 - `targets/*/target.json`: `gar setup`が検証・選択するtarget manifest
 - `docs/`: simulation設定とAI agent向けの補足資料
 
@@ -57,6 +58,41 @@ make clean
 
 GAR経由のbuildでは、選択したsimulation environmentに応じて`CC`と
 `GAR_SIM_ARCH`が設定されます。
+
+## 実機provisioning recipe
+
+OS管理領域への導入処理はGaplessAgentRuntime本体に埋め込まず、Targetの
+`target.json`からOS別recipeを選びます。SSH/systemd Targetのreference実装は
+`targets/raspberry-pi-5/provisioning/raspberry-pi-os-systemd/`です。
+
+```json
+{
+  "provisioning": {
+    "ssh_scp": {
+      "type": "ssh-script",
+      "path": "provisioning/raspberry-pi-os-systemd"
+    }
+  }
+}
+```
+
+recipeは次の3fileを持ちます。
+
+| file | 責務 |
+|---|---|
+| `prepare.sh` | 対象model/OSを検証し、必要package・service account・root管理fileを冪等に導入 |
+| `gar-target-install` | 通常deployでsudo実行できる操作と配置先を限定 |
+| `gar-app@.service` | `/opt/gar/apps/<app>/run`を非root accountでboot起動する共通unit |
+
+`gar target prepare`はrecipeを一時転送し、SSH userのsudo認証を使って実行します。
+通常の`gar target deploy`はproduct artifactをstagingした後、root所有の限定helperで
+`/opt/gar/apps/<app>`だけを更新します。product固有設定は
+`/etc/gar/<app>.env`へ分離し、再deployでは上書きしません。envは任意であり、
+存在する場合だけ共通serviceが読み込みます。設定不要またはPnPで動くproductは
+envなしでboot起動できます。
+
+別distribution、別init system、read-only rootfsにはTarget側へ別recipe/backendを
+追加します。GaplessAgentRuntime側でdistribution名による条件分岐は増やしません。
 
 ## GPIO CUSE spike
 

@@ -1,0 +1,47 @@
+#!/bin/sh
+# Root-owned, sudo-restricted installer contract used by GAR target deploy.
+set -eu
+
+fail() {
+    echo "gar-target-install: $*" >&2
+    exit 2
+}
+
+valid_destination() {
+    case "$1" in
+        /opt/gar/apps/*) name=${1#/opt/gar/apps/} ;;
+        /etc/gar/*.env) name=${1#/etc/gar/} ;;
+        *) return 1 ;;
+    esac
+    case "$name" in ""|*/*|.*) return 1 ;; esac
+}
+
+case "${1:-}" in
+    install)
+        [ "$#" -eq 4 ] || fail "usage: install STAGED_SOURCE DESTINATION MODE"
+        source=$2
+        destination=$3
+        mode=$4
+        valid_destination "$destination" || fail "destination is not permitted: $destination"
+        case "$source" in /tmp/gar-stage-*/payload) ;; *) fail "staging path is not permitted" ;; esac
+        resolved=$(realpath -e -- "$source") || fail "staged source is missing"
+        case "$resolved" in /tmp/gar-stage-*/payload) ;; *) fail "staged source escapes its directory" ;; esac
+        case "$mode" in [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) ;; *) fail "invalid mode" ;; esac
+        mkdir -p "$(dirname -- "$destination")"
+        rm -rf -- "$destination"
+        cp -a -- "$resolved" "$destination"
+        chown -R root:root "$destination"
+        chmod "$mode" "$destination"
+        ;;
+    enable-app)
+        [ "$#" -eq 2 ] || fail "usage: enable-app APP_NAME"
+        app=$2
+        case "$app" in ""|.*|*[!A-Za-z0-9._-]*) fail "invalid application name" ;; esac
+        [ -x "/opt/gar/apps/$app/run" ] || fail "application entry point is missing: /opt/gar/apps/$app/run"
+        unit="gar-app@$app.service"
+        systemctl daemon-reload
+        systemctl enable "$unit"
+        systemctl restart "$unit"
+        ;;
+    *) fail "unknown action" ;;
+esac
