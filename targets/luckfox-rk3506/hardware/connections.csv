@@ -1,0 +1,10 @@
+source,source_pin,target,target_pin,signal,description
+luckfox_rk3506,SPI0_MOSI,ili9341_lcd,SDI,SPI0,SPI data out to display
+luckfox_rk3506,SPI0_MISO,ili9341_lcd,SDO,SPI0,SPI data in from display
+luckfox_rk3506,SPI0_SCLK,ili9341_lcd,SCK,SPI0,SPI clock
+luckfox_rk3506,SPI0_CS0,ili9341_lcd,CS,SPI0_CS0,Display chip select
+luckfox_rk3506,GPIO_LCD_DC,ili9341_lcd,DC,GPIO,Display command/data select
+luckfox_rk3506,GPIO_LCD_RST,ili9341_lcd,RST,GPIO,Display reset
+luckfox_rk3506,GPIO_ENC_A,ky040_encoder,A,GPIO,Rotary phase A input
+luckfox_rk3506,GPIO_ENC_B,ky040_encoder,B,GPIO,Rotary phase B input
+luckfox_rk3506,GPIO_ENC_SW,ky040_encoder,SW,GPIO,Rotary push switch input

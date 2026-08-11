@@ -1,0 +1,77 @@
+#!/bin/sh
+# BusyBox init template. @GAR_APP@ is replaced by gar-target-install.
+
+app=@GAR_APP@
+app_dir="/opt/gar/apps/$app"
+run="$app_dir/run"
+pid_file="/var/run/gar-$app.pid"
+log_dir=/var/log/gar
+log_file="$log_dir/$app.log"
+reboot_required_file="/var/lib/gar-target/state/$app.reboot-required"
+
+is_running() {
+    [ -f "$pid_file" ] || return 1
+    pid=$(cat "$pid_file" 2>/dev/null) || return 1
+    kill -0 "$pid" 2>/dev/null
+}
+
+start() {
+    [ -x "$run" ] || {
+        echo "GAR application entry point is missing: $run" >&2
+        return 1
+    }
+    if is_running; then
+        echo "$app is already running"
+        return 0
+    fi
+    mkdir -p "$log_dir" /var/run
+    rm -f "$pid_file"
+    (
+        cd "$app_dir"
+        "$run" >>"$log_file" 2>&1 &
+        echo $! >"$pid_file"
+    )
+    sleep 1
+    if ! is_running; then
+        echo "$app failed to start; recent log follows:" >&2
+        tail -n 20 "$log_file" >&2 2>/dev/null || true
+        rm -f "$pid_file"
+        return 1
+    fi
+    rm -f "$reboot_required_file"
+    echo "Started $app"
+}
+
+stop() {
+    if ! is_running; then
+        rm -f "$pid_file"
+        return 0
+    fi
+    pid=$(cat "$pid_file")
+    kill "$pid" 2>/dev/null || true
+    count=0
+    while kill -0 "$pid" 2>/dev/null && [ "$count" -lt 20 ]; do
+        sleep 0.1
+        count=$((count + 1))
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+        kill -9 "$pid" 2>/dev/null || true
+    fi
+    rm -f "$pid_file"
+    echo "Stopped $app"
+}
+
+case "${1:-}" in
+    start) start ;;
+    stop) stop ;;
+    restart) stop; start ;;
+    status)
+        if is_running; then
+            echo "$app is running"
+        else
+            echo "$app is stopped"
+            exit 1
+        fi
+        ;;
+    *) echo "Usage: $0 {start|stop|restart|status}" >&2; exit 2 ;;
+esac

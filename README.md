@@ -10,6 +10,8 @@ scriptではなく、`GaplessAgentRuntime`の`gar` CLIです。
 - `targets/esp32/`: ESP32/M5Stack向けWokwi、QEMU、Renode、実機probe
 - `targets/luckfox-rv1106/`: Luckfox Pico Plus/Pro/Max向けhardware定義、
   application雛形、simulation helper
+- `targets/luckfox-rk3506/`: Luckfox Lyra Plus（RK3506 / Buildroot / armv7l）
+  実機Target定義。RV1106とは独立して選択する
 - `targets/raspberry-pi-5/`: Raspberry Pi OS実機とSSH/systemd provisioning recipe
 - `targets/*/target.json`: `gar setup`が検証・選択するtarget manifest
 - `docs/`: simulation設定とAI agent向けの補足資料

@@ -1,0 +1,107 @@
+#!/bin/sh
+# Root-owned constrained installer used by GAR target deploy on Buildroot.
+set -eu
+
+fail() {
+    echo "gar-target-install: $*" >&2
+    exit 2
+}
+
+valid_destination() {
+    case "$1" in
+        /opt/gar/apps/*) name=${1#/opt/gar/apps/} ;;
+        /etc/gar/*.env) name=${1#/etc/gar/} ;;
+        *) return 1 ;;
+    esac
+    case "$name" in ""|*/*|.*) return 1 ;; esac
+}
+
+validate_app() {
+    case "$1" in ""|.*|*[!A-Za-z0-9._-]*) fail "invalid application name" ;; esac
+}
+
+set_app_paths() {
+    app=$1
+    case "$app" in
+        gar-*) init_name=$app ;;
+        *) init_name=gar-$app ;;
+    esac
+    init_script="/etc/init.d/S95$init_name"
+    state_dir=/var/lib/gar-target/state
+    reboot_required="$state_dir/$app.reboot-required"
+}
+
+register_app() {
+    app=$1
+    validate_app "$app"
+    [ -x "/opt/gar/apps/$app/run" ] || fail "application entry point is missing: /opt/gar/apps/$app/run"
+    template=/usr/local/lib/gar/gar-app-init
+    [ -f "$template" ] || fail "BusyBox launcher template is missing; run gar target prepare"
+
+    set_app_paths "$app"
+    temporary="${init_script}.gar-new.$$"
+    mkdir -p "$state_dir"
+    if [ -x "$init_script" ]; then
+        "$init_script" stop || true
+    fi
+
+    configure_status=0
+    configure="/opt/gar/apps/$app/configure-target"
+    if [ -x "$configure" ]; then
+        "$configure" || configure_status=$?
+        case "$configure_status" in
+            0|10) ;;
+            *) fail "application target configuration failed: $app (exit $configure_status)" ;;
+        esac
+    fi
+
+    sed "s/@GAR_APP@/$app/g" "$template" >"$temporary"
+    chmod 0755 "$temporary"
+    mv "$temporary" "$init_script"
+    if [ "$configure_status" -eq 10 ]; then
+        marker_temporary="${reboot_required}.gar-new.$$"
+        printf '%s\n' "$app" >"$marker_temporary"
+        chmod 0600 "$marker_temporary"
+        mv "$marker_temporary" "$reboot_required"
+        echo "$app is installed and will start after the required target reboot"
+        return 0
+    fi
+    rm -f "$reboot_required"
+    echo "$app is registered with BusyBox init"
+}
+
+case "${1:-}" in
+    install)
+        [ "$#" -eq 4 ] || fail "usage: install STAGED_SOURCE DESTINATION MODE"
+        source=$2
+        destination=$3
+        mode=$4
+        valid_destination "$destination" || fail "destination is not permitted: $destination"
+        case "$source" in /tmp/gar-stage-*/payload) ;; *) fail "staging path is not permitted" ;; esac
+        [ -e "$source" ] || fail "staged source is missing"
+        case "$mode" in [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) ;; *) fail "invalid mode" ;; esac
+
+        parent=$(dirname "$destination")
+        temporary="${destination}.gar-new.$$"
+        mkdir -p "$parent"
+        rm -rf "$temporary"
+        cp -R -p "$source" "$temporary"
+        chown -R 0:0 "$temporary"
+        chmod "$mode" "$temporary"
+        rm -rf "$destination"
+        mv "$temporary" "$destination"
+        ;;
+    register-app)
+        [ "$#" -eq 2 ] || fail "usage: register-app APP_NAME"
+        register_app "$2"
+        ;;
+    enable-app)
+        [ "$#" -eq 2 ] || fail "usage: enable-app APP_NAME"
+        register_app "$2"
+        set_app_paths "$2"
+        if [ ! -f "$reboot_required" ]; then
+            "$init_script" start
+        fi
+        ;;
+    *) fail "unknown action" ;;
+esac

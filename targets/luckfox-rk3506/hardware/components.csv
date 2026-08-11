@@ -1,0 +1,5 @@
+component_id,name,kind,part_number,description
+luckfox_rk3506,Luckfox Lyra Plus,board,RK3506G2,Primary embedded Linux RX board
+ili9341_lcd,LCD Module,ic,ILI9341,2.4-2.8 inch SPI TFT display
+ky040_encoder,Rotary Encoder,input,KY-040,Incremental rotary encoder with push switch
+eth_uplink,LAN Uplink,interface,RJ45,Wired network for SSH deploy and streaming
