@@ -19,8 +19,22 @@ class RaspberryPiTargetRecipeTest(unittest.TestCase):
         self.assertEqual("ssh_scp", manifest["defaultBackends"]["target"])
         self.assertEqual(
             {
+                "architecture": "aarch64",
+                "abi": "gnu",
+                "libc": "glibc",
+                "toolchainTriple": "aarch64-linux-gnu",
+            },
+            manifest["compatibility"],
+        )
+        self.assertEqual(
+            {
                 "type": "ssh-script",
                 "path": "provisioning/raspberry-pi-os-systemd",
+                "recipeVersion": 1,
+                "lifecycle": {
+                    "type": "gar-app-lifecycle-v1",
+                    "command": "/usr/local/lib/gar/gar-target-lifecycle",
+                },
             },
             manifest["provisioning"]["ssh_scp"],
         )
@@ -28,15 +42,31 @@ class RaspberryPiTargetRecipeTest(unittest.TestCase):
     def test_recipe_contains_the_standard_boot_contract(self) -> None:
         prepare = (RECIPE / "prepare.sh").read_text(encoding="utf-8")
         service = (RECIPE / "gar-app@.service").read_text(encoding="utf-8")
+        lifecycle = (RECIPE / "gar-target-lifecycle").read_text(encoding="utf-8")
 
         self.assertIn("Raspberry Pi 5", prepare)
         self.assertIn("gar-target-install", prepare)
+        self.assertIn("gar-target-lifecycle", prepare)
+        self.assertIn("/etc/gar/target-id", prepare)
+        self.assertIn(
+            "NOPASSWD: /usr/local/lib/gar/gar-target-install, "
+            "/usr/local/lib/gar/gar-target-lifecycle",
+            prepare,
+        )
+        self.assertNotIn("NOPASSWD: ALL", prepare)
+        installer = (RECIPE / "gar-target-install").read_text(encoding="utf-8")
+        self.assertIn("register-app", installer)
         self.assertIn("User=gar", service)
         self.assertIn("ExecStart=/opt/gar/apps/%i/run", service)
         self.assertIn("EnvironmentFile=-/etc/gar/%i.env", service)
         self.assertNotIn("ConditionPathExists", service)
         self.assertIn("NoNewPrivileges=true", service)
         self.assertNotIn("gpio-sim", prepare)
+        self.assertIn("/usr/bin/systemctl", lifecycle)
+        self.assertIn("/usr/bin/journalctl", lifecycle)
+        self.assertIn(".gar-artifact.json", lifecycle)
+        self.assertIn("running-build-id", lifecycle)
+        self.assertIn("--build-id", lifecycle)
 
     def test_installer_rejects_paths_outside_the_application_contract(self) -> None:
         installer = RECIPE / "gar-target-install"

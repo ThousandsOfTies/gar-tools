@@ -21,8 +21,10 @@ SSH accountは通常の鍵認証を使います。`prepare`でsudo passwordが�
 - system service account `gar`
 - 存在する`gpio`、`spi`、`video`、`i2c`groupへの`gar`追加
 - root所有の`/usr/local/lib/gar/gar-target-install`
+- root所有の`/usr/local/lib/gar/gar-target-lifecycle`
 - root所有の共通systemd template `gar-app@.service`
-- root管理の標準directory `/opt/gar/apps`と`/etc/gar`
+- root管理の標準directory `/opt/gar/apps`、`/etc/gar`、`/var/lib/gar-target/state`
+- 論理Target ID `/etc/gar/target-id`
 - GAR限定installerだけを許可するsudoers rule
 
 旧GAR試作版が作った`/etc/sudoers.d/90-gar-deploy`は`NOPASSWD: ALL`だったため、
@@ -45,6 +47,29 @@ envなしで起動できます。
 product artifactは独自のroot所有service unitを配布しません。boot統合、`gar`account、
 device group、systemd hardeningはTarget/OS recipeに集約します。product固有の永続設定は
 `/etc/gar`へ分離され、通常のapplication deployで上書きされません。
+
+## Lifecycle contract
+
+manifestの`gar-app-lifecycle-v1` capabilityは、systemdの差をTarget recipe内へ閉じ込め、
+次の共通操作を提供します。
+
+```text
+gar-target-lifecycle status APP
+gar-target-lifecycle log APP [--lines N]
+gar-target-lifecycle health APP
+gar-target-lifecycle reload APP --build-id BUILD_ID
+gar-target-lifecycle running-build-id APP
+```
+
+通常userのSSH接続ではGARが限定sudoers ruleを通して`sudo -n`でhelperを呼びます。
+`reload`はservice restartとhealth確認が成功し、deployed
+`/opt/gar/apps/APP/.gar-artifact.json`のschema v2 build IDと一致した場合だけ、
+health確認済みIDを記録します。`running-build-id`はserviceがhealthyで、記録IDと
+deployed markerが一致する場合だけIDを返します。artifactに実行可能な`health`が
+あれば、serviceと同じ`gar` userで追加probeとして実行します。
+deploy時は限定installerの`register-app`がunitのenableだけを行い、processの
+restartと収束判定は続くlifecycle `reload`へ一元化します。従来の直接利用向け
+`enable-app` actionはregister後にrestartする互換入口として残します。
 
 `provisioning/raspberry-pi-os-systemd/`がsystemd型Target recipeのreference templateです。
 別distribution、別init system、read-only rootfsはGaplessAgentRuntimeへ条件分岐を

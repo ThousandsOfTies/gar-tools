@@ -16,6 +16,19 @@ valid_destination() {
     case "$name" in ""|*/*|.*) return 1 ;; esac
 }
 
+validate_app() {
+    case "$1" in ""|.*|*[!A-Za-z0-9._-]*) fail "invalid application name" ;; esac
+}
+
+register_app() {
+    app=$1
+    validate_app "$app"
+    [ -x "/opt/gar/apps/$app/run" ] || fail "application entry point is missing: /opt/gar/apps/$app/run"
+    unit="gar-app@$app.service"
+    systemctl daemon-reload
+    systemctl enable "$unit"
+}
+
 case "${1:-}" in
     install)
         [ "$#" -eq 4 ] || fail "usage: install STAGED_SOURCE DESTINATION MODE"
@@ -33,14 +46,15 @@ case "${1:-}" in
         chown -R root:root "$destination"
         chmod "$mode" "$destination"
         ;;
+    register-app)
+        [ "$#" -eq 2 ] || fail "usage: register-app APP_NAME"
+        register_app "$2"
+        ;;
     enable-app)
         [ "$#" -eq 2 ] || fail "usage: enable-app APP_NAME"
+        register_app "$2"
         app=$2
-        case "$app" in ""|.*|*[!A-Za-z0-9._-]*) fail "invalid application name" ;; esac
-        [ -x "/opt/gar/apps/$app/run" ] || fail "application entry point is missing: /opt/gar/apps/$app/run"
         unit="gar-app@$app.service"
-        systemctl daemon-reload
-        systemctl enable "$unit"
         systemctl restart "$unit"
         ;;
     *) fail "unknown action" ;;

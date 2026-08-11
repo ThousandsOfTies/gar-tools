@@ -7,16 +7,18 @@ fail() {
     exit 2
 }
 
-[ "$#" -eq 3 ] || fail "usage: prepare.sh SSH_USER INSTALLER_SOURCE SERVICE_SOURCE"
+[ "$#" -eq 4 ] || fail "usage: prepare.sh SSH_USER INSTALLER_SOURCE SERVICE_SOURCE LIFECYCLE_SOURCE"
 ssh_user=$1
 installer_source=$2
 service_source=$3
+lifecycle_source=$4
 
 case "$ssh_user" in
     ""|*[!A-Za-z0-9_-]*) fail "invalid SSH user" ;;
 esac
 [ -f "$installer_source" ] || fail "installer payload is missing"
 [ -f "$service_source" ] || fail "systemd service template is missing"
+[ -f "$lifecycle_source" ] || fail "lifecycle helper payload is missing"
 
 model=$(tr -d '\000' </proc/device-tree/model 2>/dev/null || true)
 case "$model" in
@@ -34,6 +36,7 @@ esac
 
 command -v systemctl >/dev/null || fail "systemd is required"
 command -v sudo >/dev/null || fail "sudo is required"
+command -v runuser >/dev/null || fail "runuser is required"
 
 runtime_packages="python3 python3-gi python3-spidev python3-periphery gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-tools gstreamer1.0-plugins-good gstreamer1.0-plugins-bad v4l-utils"
 missing_packages=""
@@ -58,13 +61,21 @@ for group in gpio spi video i2c; do
     fi
 done
 
-sudo /usr/bin/install -d -o root -g root -m 0755 /opt/gar/apps /etc/gar
+sudo /usr/bin/install -d -o root -g root -m 0755 \
+    /opt/gar/apps /etc/gar /var/lib/gar-target /var/lib/gar-target/state
 
 sudo /usr/bin/install -D -o root -g root -m 0755 "$installer_source" \
     /usr/local/lib/gar/gar-target-install
+sudo /usr/bin/install -D -o root -g root -m 0755 "$lifecycle_source" \
+    /usr/local/lib/gar/gar-target-lifecycle
 sudo /usr/bin/install -D -o root -g root -m 0644 "$service_source" \
     /etc/systemd/system/gar-app@.service
-sudoers_line="$ssh_user ALL=(root) NOPASSWD: /usr/local/lib/gar/gar-target-install"
+target_id_staging=/etc/gar/.target-id.gar-new.$$
+printf '%s\n' raspberry-pi-5 | sudo /usr/bin/tee "$target_id_staging" >/dev/null
+sudo /usr/bin/chown root:root "$target_id_staging"
+sudo /usr/bin/chmod 0644 "$target_id_staging"
+sudo /bin/mv "$target_id_staging" /etc/gar/target-id
+sudoers_line="$ssh_user ALL=(root) NOPASSWD: /usr/local/lib/gar/gar-target-install, /usr/local/lib/gar/gar-target-lifecycle"
 printf '%s\n' "$sudoers_line" | sudo /usr/bin/tee /etc/sudoers.d/90-gar-target >/dev/null
 sudo /usr/bin/chmod 0440 /etc/sudoers.d/90-gar-target
 sudo /usr/sbin/visudo -cf /etc/sudoers.d/90-gar-target

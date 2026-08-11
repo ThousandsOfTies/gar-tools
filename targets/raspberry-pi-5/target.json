@@ -3,6 +3,12 @@
   "displayName": "Raspberry Pi 5 / Raspberry Pi OS",
   "description": "Raspberry Pi 5 physical target running Raspberry Pi OS with systemd, real GPIO/SPI/video devices, and SSH deployment.",
   "toolsRoot": "targets/raspberry-pi-5",
+  "compatibility": {
+    "architecture": "aarch64",
+    "abi": "gnu",
+    "libc": "glibc",
+    "toolchainTriple": "aarch64-linux-gnu"
+  },
   "defaultBackends": {
     "codespace": "local",
     "simulator": "ssh_remote",
@@ -16,7 +22,12 @@
   "provisioning": {
     "ssh_scp": {
       "type": "ssh-script",
-      "path": "provisioning/raspberry-pi-os-systemd"
+      "path": "provisioning/raspberry-pi-os-systemd",
+      "recipeVersion": 1,
+      "lifecycle": {
+        "type": "gar-app-lifecycle-v1",
+        "command": "/usr/local/lib/gar/gar-target-lifecycle"
+      }
     }
   }
 }

@@ -1,0 +1,195 @@
+#!/bin/sh
+# Target-owned lifecycle adapter for Raspberry Pi OS/systemd applications.
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+apps_root=/opt/gar/apps
+state_root=/var/lib/gar-target/state
+systemctl=/usr/bin/systemctl
+journalctl=/usr/bin/journalctl
+runuser=/usr/sbin/runuser
+
+fail() {
+    echo "gar-target-lifecycle: $*" >&2
+    exit 2
+}
+
+unhealthy() {
+    echo "gar-target-lifecycle: $*" >&2
+    exit 1
+}
+
+validate_app() {
+    case "$1" in
+        ""|.*|*[!A-Za-z0-9._-]*) fail "invalid application name" ;;
+    esac
+}
+
+validate_build_id() {
+    case "$1" in
+        ""|*[!A-Za-z0-9._:-]*) fail "invalid build ID" ;;
+    esac
+}
+
+validate_lines() {
+    case "$1" in
+        ""|*[!0-9]*) fail "log line count must be an integer" ;;
+    esac
+    [ "$1" -ge 1 ] 2>/dev/null && [ "$1" -le 10000 ] 2>/dev/null || \
+        fail "log line count must be between 1 and 10000"
+}
+
+app_dir() {
+    printf '%s/%s\n' "$apps_root" "$app"
+}
+
+state_file() {
+    printf '%s/%s.build-id\n' "$state_root" "$app"
+}
+
+unit_name() {
+    printf 'gar-app@%s.service\n' "$app"
+}
+
+require_deployed() {
+    [ -x "$(app_dir)/run" ] || unhealthy "application is not deployed: $app"
+}
+
+is_running() {
+    "$systemctl" is-active --quiet "$(unit_name)"
+}
+
+run_health_hook() {
+    hook="$(app_dir)/health"
+    [ -x "$hook" ] || return 0
+    "$runuser" -u gar -- /bin/sh -c 'cd "$1" && exec "$2"' sh "$(app_dir)" "$hook"
+}
+
+is_healthy() {
+    is_running && run_health_hook >/dev/null 2>&1
+}
+
+deployed_build_id() {
+    metadata="$(app_dir)/.gar-artifact.json"
+    [ -r "$metadata" ] || unhealthy "artifact provenance marker is missing: $metadata"
+    payload=$(tr -d '\r\n' <"$metadata") || unhealthy "artifact provenance marker cannot be read: $metadata"
+    schema=$(printf '%s\n' "$payload" | sed -n 's/.*"schema_version"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p')
+    kind=$(printf '%s\n' "$payload" | sed -n 's/.*"kind"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    build=$(printf '%s\n' "$payload" | sed -n 's/.*"build_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    [ "$schema" = 2 ] || unhealthy "artifact provenance schema is not v2: ${schema:-missing}"
+    [ "$kind" = target_app ] || unhealthy "artifact provenance kind is not target_app: ${kind:-missing}"
+    validate_build_id "$build"
+    printf '%s\n' "$build"
+}
+
+record_running_build() {
+    build=$1
+    mkdir -p "$state_root"
+    temporary="$(state_file).gar-new.$$"
+    umask 077
+    printf '%s\n' "$build" >"$temporary"
+    mv "$temporary" "$(state_file)"
+}
+
+clear_running_build() {
+    rm -f "$(state_file)"
+}
+
+do_status() {
+    require_deployed
+    if is_running; then
+        echo "$app is running"
+        return 0
+    fi
+    unhealthy "$app is not running"
+}
+
+do_log() {
+    lines=$1
+    require_deployed
+    "$journalctl" --unit "$(unit_name)" --lines "$lines" --no-pager
+}
+
+do_health() {
+    require_deployed
+    if is_healthy; then
+        echo "$app is healthy"
+        return 0
+    fi
+    unhealthy "$app is unhealthy"
+}
+
+do_reload() {
+    requested_build=$1
+    require_deployed
+    deployed_build=$(deployed_build_id)
+    [ "$requested_build" = "$deployed_build" ] || \
+        unhealthy "requested build ID does not match deployed artifact: $requested_build != $deployed_build"
+
+    clear_running_build
+    "$systemctl" restart "$(unit_name)" || unhealthy "$app failed to restart"
+    attempts=0
+    while [ "$attempts" -lt 5 ]; do
+        if is_healthy; then
+            record_running_build "$requested_build"
+            echo "$app is running build $requested_build"
+            return 0
+        fi
+        attempts=$((attempts + 1))
+        [ "$attempts" -lt 5 ] && sleep 1
+    done
+    unhealthy "$app did not become healthy after reload"
+}
+
+do_running_build_id() {
+    require_deployed
+    is_healthy || unhealthy "$app is not healthy"
+    [ -r "$(state_file)" ] || unhealthy "$app has no health-verified running build ID"
+    running_build=$(sed -n '1p' "$(state_file)")
+    validate_build_id "$running_build"
+    deployed_build=$(deployed_build_id)
+    [ "$running_build" = "$deployed_build" ] || \
+        unhealthy "$app running build does not match the deployed artifact"
+    printf '%s\n' "$running_build"
+}
+
+action=${1:-}
+app=${2:-}
+[ -n "$action" ] && [ -n "$app" ] || \
+    fail "usage: gar-target-lifecycle ACTION APP [--lines N | --build-id BUILD_ID]"
+validate_app "$app"
+
+case "$action" in
+    status)
+        [ "$#" -eq 2 ] || fail "usage: gar-target-lifecycle status APP"
+        do_status
+        ;;
+    log)
+        if [ "$#" -eq 2 ]; then
+            lines=200
+        elif [ "$#" -eq 4 ] && [ "$3" = --lines ]; then
+            lines=$4
+        else
+            fail "usage: gar-target-lifecycle log APP [--lines N]"
+        fi
+        validate_lines "$lines"
+        do_log "$lines"
+        ;;
+    health)
+        [ "$#" -eq 2 ] || fail "usage: gar-target-lifecycle health APP"
+        do_health
+        ;;
+    reload)
+        [ "$#" -eq 4 ] && [ "$3" = --build-id ] || \
+            fail "usage: gar-target-lifecycle reload APP --build-id BUILD_ID"
+        validate_build_id "$4"
+        do_reload "$4"
+        ;;
+    running-build-id)
+        [ "$#" -eq 2 ] || fail "usage: gar-target-lifecycle running-build-id APP"
+        do_running_build_id
+        ;;
+    *) fail "unknown action: $action" ;;
+esac
