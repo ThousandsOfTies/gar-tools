@@ -30,7 +30,7 @@ class RaspberryPiTargetRecipeTest(unittest.TestCase):
             {
                 "type": "ssh-script",
                 "path": "provisioning/raspberry-pi-os-systemd",
-                "recipeVersion": 3,
+                "recipeVersion": 4,
                 "lifecycle": {
                     "type": "gar-app-lifecycle-v1",
                     "command": "/usr/local/lib/gar/gar-target-lifecycle",

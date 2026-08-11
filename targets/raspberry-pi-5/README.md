@@ -4,6 +4,14 @@
 applicationはreal `/dev/gpiochip*`、`/dev/spidev*`、`/dev/video*`を直接使用します。
 CUSE、gpio-sim、simulation Web Panelは実機へdeployしません。
 
+## Hardware boundary
+
+`hardware/capabilities.json` is the Target Pack contract for verified GPIO,
+SPI, USB video, and network resources. It records board capabilities only;
+application requirements and physical wiring belong to the product and its
+versioned Target binding. The empty CSV templates under `hardware/` are copied
+into a product workspace by `gar hw init` before an assignment is made.
+
 ## 標準フロー
 
 `target.json`の`provisioning.ssh_scp`がRaspberry Pi OS/systemd recipeを選択します。

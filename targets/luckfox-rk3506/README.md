@@ -12,7 +12,7 @@ The verified board environment is:
 
 This Target is intentionally separate from `luckfox-rv1106`, which describes
 the Luckfox Pico RV1106 family. Simulation uses the shared `linux-device`
-runtime; physical deployment must use the Lyra's real GPIO and SPI devices.
+runtime; physical deployment uses the board's real kernel interfaces.
 
 The product build owns the self-contained armv7 application artifact. This
 Target owns the constrained deploy helper and the BusyBox init launcher used
@@ -68,7 +68,11 @@ Preparation also writes `/etc/gar/target-id` with `luckfox-rk3506`; compatibilit
 checks combine that logical ID with the measured architecture and libc before
 any application payload is transferred.
 
-`hardware/` defines the RX simulator contract: KY-040 phase/switch lines
-20-22, ILI9341 DC/reset lines 23-24, and `/dev/spidev0.0`. These are stable
-virtual offsets, not assumptions about the Lyra header. The physical offsets
-documented by the product wiring belong in `/etc/gar/gar-stream-rx.env`.
+## Hardware boundary
+
+`hardware/capabilities.json` declares the board's available GPIO, SPI, and
+network resources. The file is target-owned and is intentionally free of
+application components or wiring. `hardware/` is only a blank workspace
+template; product requirements and physical bindings are kept outside this
+Target. This separation lets GAR reject incompatible assignments before a
+deploy without turning a board definition into an application profile.

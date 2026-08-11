@@ -1,9 +1,9 @@
 # Luckfox RK3506 Hardware Template
 
-Default simulation hardware contract for the Luckfox Lyra Plus RX product:
-an ILI9341 SPI display and a KY-040 rotary encoder.
+This directory is a deliberately empty assignment template. `gar hw init`
+copies these CSV headers to a product workspace, where product requirements
+are bound to the board resources in `../capabilities.json`.
 
-The line numbers are the stable simulator contract. A physical Lyra maps the
-same roles to its board-specific GPIO offsets through `/etc/gar/gar-stream-rx.env`;
-the application continues to use Linux `/dev/gpiochip*` and `/dev/spidev*`
-interfaces in both environments.
+Do not add an application's display, input, media, or wiring rows here. Those
+facts belong respectively to the product requirement and machine-local
+binding, because neither is an invariant of the RK3506 board.

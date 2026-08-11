@@ -1,6 +1,1 @@
 name,chip,line,direction,role,active,initial,pull,sim_control,description
-encoder_a,/dev/gpiochip0,20,input,encoder,high,,pull-up,,KY-040 phase A
-encoder_b,/dev/gpiochip0,21,input,encoder,high,,pull-up,,KY-040 phase B
-encoder_sw,/dev/gpiochip0,22,input,button,low,,pull-up,,KY-040 push switch
-lcd_dc,/dev/gpiochip0,23,output,display_ctrl,high,1,,,ILI9341 command/data select
-lcd_rst,/dev/gpiochip0,24,output,display_ctrl,high,1,,,ILI9341 reset line

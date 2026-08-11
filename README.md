@@ -16,8 +16,11 @@ scriptではなく、`GaplessAgentRuntime`の`gar` CLIです。
 - `targets/*/target.json`: `gar setup`が検証・選択するtarget manifest
 - `docs/`: simulation設定とAI agent向けの補足資料
 
-各targetの`hardware/*.csv`はhardware定義のテンプレートです。product固有の
-定義は`gar hw init`でworkspaceへ展開してから編集します。
+各targetの`hardware/capabilities.json`はboard/OSが提供するGPIO、SPI、video、
+networkなどの能力を宣言するTarget Pack contractです。`hardware/*.csv`は空の
+assignment templateであり、product固有の要件・部品・配線を含めません。productの
+定義は`gar hw init`でworkspaceへ展開してから編集し、実際のpin/bus割当は
+Product所有のTarget bindingとして管理します。SSH/IP等の個体差だけをmachine-local設定に残します。
 
 ## GARから使う
 

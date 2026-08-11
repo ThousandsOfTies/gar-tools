@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "target_id": "luckfox-rk3506",
+  "platform": {
+    "architecture": "armv7l",
+    "abi": "gnueabihf",
+    "toolchain_triple": "arm-buildroot-linux-gnueabihf",
+    "init_system": "busybox",
+    "privilege_model": "root"
+  },
+  "resources": [
+    {
+      "id": "gpio0",
+      "kind": "gpio",
+      "device": "/dev/gpiochip0",
+      "voltage_v": 3.3,
+      "drivers": [
+        "gpio-rockchip",
+        "gpio-cdev"
+      ],
+      "pinmux": {
+        "id": "gpio",
+        "settings": [
+          "iomux 0 2 0",
+          "iomux 0 3 0",
+          "iomux 0 8 0",
+          "iomux 0 9 0",
+          "iomux 0 10 0"
+        ]
+      },
+      "lines": [
+        2,
+        3,
+        8,
+        9,
+        10
+      ],
+      "line_pins": {
+        "2": "RM_IO2",
+        "3": "RM_IO3",
+        "8": "RM_IO8",
+        "9": "RM_IO9",
+        "10": "RM_IO10"
+      },
+      "directions": [
+        "input",
+        "output"
+      ]
+    },
+    {
+      "id": "spi0.cs0",
+      "kind": "spi",
+      "device": "/dev/spidev0.0",
+      "voltage_v": 3.3,
+      "drivers": [
+        "spi-rockchip",
+        "spidev"
+      ],
+      "pinmux": {
+        "id": "spi0",
+        "settings": [
+          "iomux 0 7 82",
+          "iomux 0 6 83",
+          "iomux 0 5 84",
+          "iomux 0 4 85"
+        ]
+      },
+      "bus": 0,
+      "chip_select": 0,
+      "max_speed_hz": 40000000,
+      "modes": [0, 1, 2, 3],
+      "signal_pins": {
+        "MOSI": "RM_IO6",
+        "MISO": "RM_IO5",
+        "SCLK": "RM_IO7",
+        "CS0": "RM_IO4"
+      }
+    },
+    {
+      "id": "network0",
+      "kind": "network",
+      "device": "eth0",
+      "drivers": [
+        "linux-netdev",
+        "rk_gmac-dwmac"
+      ],
+      "pinmux": {
+        "id": "ethernet",
+        "settings": []
+      },
+      "signal_pins": {
+        "Ethernet": "RJ45"
+      }
+    }
+  ]
+}

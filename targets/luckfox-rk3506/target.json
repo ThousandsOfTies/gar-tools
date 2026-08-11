@@ -18,14 +18,14 @@
     "simulator": "Use the linux-device runtime on an ARM64 SSH simulation host.",
     "target": "Deploy to the physical Lyra Plus over an SSH config Host. The board runs Buildroot with BusyBox init rather than systemd.",
     "media": "Use the RK3506 Buildroot media stack available in the selected board image.",
-    "ui": "Drive the physical ILI9341 and KY-040 through the board's real SPI and GPIO devices; simulation stubs are not deployed to the target.",
+    "hardware": "Board resources and kernel interfaces are described by hardware/capabilities.json; product wiring is a product-owned Target binding.",
     "prepare": "Run gar target prepare once to install the constrained Buildroot deploy helper and BusyBox init template."
   },
   "provisioning": {
     "ssh_scp": {
       "type": "ssh-script",
       "path": "provisioning/buildroot-busybox",
-      "recipeVersion": 3,
+      "recipeVersion": 4,
       "lifecycle": {
         "type": "gar-app-lifecycle-v1",
         "command": "/usr/local/lib/gar/gar-target-lifecycle"

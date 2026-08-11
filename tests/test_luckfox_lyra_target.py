@@ -39,7 +39,7 @@ class LuckfoxLyraTargetTests(unittest.TestCase):
             {
                 "type": "ssh-script",
                 "path": "provisioning/buildroot-busybox",
-                "recipeVersion": 3,
+                "recipeVersion": 4,
                 "lifecycle": {
                     "type": "gar-app-lifecycle-v1",
                     "command": "/usr/local/lib/gar/gar-target-lifecycle",
@@ -96,15 +96,21 @@ class LuckfoxLyraTargetTests(unittest.TestCase):
         self.assertNotIn("systemctl", prepare + installer + launcher + lifecycle)
         self.assertNotIn("sudo", prepare + installer + launcher + lifecycle)
 
-    def test_simulation_hardware_matches_rx_device_contract(self) -> None:
-        gpio = (TARGET / "hardware" / "gpio.csv").read_text(encoding="utf-8")
-        spi = (TARGET / "hardware" / "spi.csv").read_text(encoding="utf-8")
+    def test_hardware_template_has_headers_only(self) -> None:
+        hardware = TARGET / "hardware"
 
-        self.assertIn("encoder_a,/dev/gpiochip0,20,input,encoder", gpio)
-        self.assertIn("encoder_sw,/dev/gpiochip0,22,input,button,low", gpio)
-        self.assertIn("lcd_dc,/dev/gpiochip0,23,output,display_ctrl", gpio)
-        self.assertIn("lcd_rst,/dev/gpiochip0,24,output,display_ctrl", gpio)
-        self.assertIn("/dev/spidev0.0,0,40000000,ili9341,ili9341", spi)
+        self.assertEqual(
+            "name,chip,line,direction,role,active,initial,pull,sim_control,description\n",
+            (hardware / "gpio.csv").read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            "name,bus,chip_select,dev,mode,max_speed_hz,driver,sim,description\n",
+            (hardware / "spi.csv").read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            "source,source_pin,target,target_pin,signal,description\n",
+            (hardware / "connections.csv").read_text(encoding="utf-8"),
+        )
 
 
 if __name__ == "__main__":
