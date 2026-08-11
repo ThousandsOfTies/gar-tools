@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import shlex
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -26,6 +28,9 @@ LYRA_HELPER = (
     / "buildroot-busybox"
     / "gar-target-lifecycle"
 )
+LYRA_LAUNCHER = LYRA_HELPER.with_name("gar-app@.service")
+PI_INSTALLER = PI_HELPER.with_name("gar-target-install")
+LYRA_INSTALLER = LYRA_HELPER.with_name("gar-target-install")
 
 
 class TargetLifecycleRecipeTests(unittest.TestCase):
@@ -74,6 +79,145 @@ class TargetLifecycleRecipeTests(unittest.TestCase):
                 self.assertIn("invalid application name", invalid_app.stderr)
                 self.assertEqual(2, invalid_build.returncode)
                 self.assertIn("invalid build ID", invalid_build.stderr)
+
+    def test_busybox_stop_rejects_reused_pid_identity_without_killing_process(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            app_dir = root / "apps" / "demo"
+            app_dir.mkdir(parents=True)
+            pid_file = root / "gar-demo.pid"
+            log_dir = root / "log"
+            reboot_required = root / "state" / "demo.reboot-required"
+            content = LYRA_LAUNCHER.read_text(encoding="utf-8")
+            replacements = {
+                "app=@GAR_APP@": "app=demo",
+                'app_dir="/opt/gar/apps/$app"': f"app_dir={shlex.quote(str(app_dir))}",
+                'pid_file="/var/run/gar-$app.pid"': f"pid_file={shlex.quote(str(pid_file))}",
+                "log_dir=/var/log/gar": f"log_dir={shlex.quote(str(log_dir))}",
+                'reboot_required_file="/var/lib/gar-target/state/$app.reboot-required"': (
+                    f"reboot_required_file={shlex.quote(str(reboot_required))}"
+                ),
+            }
+            for original, replacement in replacements.items():
+                self.assertIn(original, content)
+                content = content.replace(original, replacement, 1)
+            launcher = root / "S95gar-demo"
+            self._write_executable(launcher, content)
+
+            unrelated = subprocess.Popen(("sleep", "30"))
+            try:
+                pid_file.write_text(f"{unrelated.pid} 0\n", encoding="utf-8")
+
+                stopped = self._run(launcher, "stop")
+
+                self.assertEqual(0, stopped.returncode, stopped.stderr)
+                self.assertIsNone(unrelated.poll())
+                self.assertFalse(pid_file.exists())
+            finally:
+                if unrelated.poll() is None:
+                    unrelated.terminate()
+                unrelated.wait(timeout=5)
+
+    def test_busybox_stop_terminates_the_recorded_process_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            app_dir = root / "apps" / "demo"
+            app_dir.mkdir(parents=True)
+            self._write_executable(app_dir / "run", "#!/bin/sh\nexec sleep 30\n")
+            pid_file = root / "gar-demo.pid"
+            log_dir = root / "log"
+            reboot_required = root / "state" / "demo.reboot-required"
+            content = LYRA_LAUNCHER.read_text(encoding="utf-8")
+            replacements = {
+                "app=@GAR_APP@": "app=demo",
+                'app_dir="/opt/gar/apps/$app"': f"app_dir={shlex.quote(str(app_dir))}",
+                'pid_file="/var/run/gar-$app.pid"': f"pid_file={shlex.quote(str(pid_file))}",
+                "log_dir=/var/log/gar": f"log_dir={shlex.quote(str(log_dir))}",
+                'reboot_required_file="/var/lib/gar-target/state/$app.reboot-required"': (
+                    f"reboot_required_file={shlex.quote(str(reboot_required))}"
+                ),
+            }
+            for original, replacement in replacements.items():
+                self.assertIn(original, content)
+                content = content.replace(original, replacement, 1)
+            launcher = root / "S95gar-demo"
+            self._write_executable(launcher, content)
+
+            started = self._run(launcher, "start")
+            self.assertEqual(0, started.returncode, started.stderr)
+            pid_text, start_time = pid_file.read_text(encoding="utf-8").split()
+            pid = int(pid_text)
+            self.assertGreater(int(start_time), 0)
+            try:
+                stopped = self._run(launcher, "stop")
+
+                self.assertEqual(0, stopped.returncode, stopped.stderr)
+                self.assertFalse(pid_file.exists())
+                deadline = time.monotonic() + 2
+                while Path(f"/proc/{pid}").exists() and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                self.assertFalse(Path(f"/proc/{pid}").exists())
+            finally:
+                if Path(f"/proc/{pid}").exists():
+                    os.kill(pid, signal.SIGKILL)
+
+    def test_installers_harden_only_app_root_and_provenance_marker_modes(self) -> None:
+        for source_installer in (PI_INSTALLER, LYRA_INSTALLER):
+            with self.subTest(installer=source_installer), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                installer = self._sandbox_installer(source_installer, root)
+                destination = root / "apps" / "demo"
+                with tempfile.TemporaryDirectory(prefix="gar-stage-") as stage:
+                    payload = Path(stage) / "payload"
+                    payload.mkdir()
+                    marker = payload / ".gar-artifact.json"
+                    marker.write_text('{"build_id":"build:one"}\n', encoding="utf-8")
+                    marker.chmod(0o666)
+                    run = payload / "run"
+                    self._write_executable(run, "#!/bin/sh\nexit 0\n")
+                    run.chmod(0o751)
+
+                    result = subprocess.run(
+                        (str(installer), "install", str(payload), str(destination), "0777"),
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                    )
+
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual(0, destination.stat().st_mode & 0o022)
+                self.assertEqual(0o444, (destination / ".gar-artifact.json").stat().st_mode & 0o777)
+                self.assertEqual(0o751, (destination / "run").stat().st_mode & 0o777)
+
+    def test_installers_keep_previous_destination_when_staging_copy_fails(self) -> None:
+        for source_installer in (PI_INSTALLER, LYRA_INSTALLER):
+            with self.subTest(installer=source_installer), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                installer = self._sandbox_installer(source_installer, root)
+                destination = root / "apps" / "demo"
+                destination.mkdir(parents=True)
+                (destination / "old-release").write_text("old\n", encoding="utf-8")
+                fake_bin = root / "bin"
+                fake_bin.mkdir()
+                self._write_executable(fake_bin / "cp", "#!/bin/sh\nexit 9\n")
+                environment = os.environ.copy()
+                environment["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+                with tempfile.TemporaryDirectory(prefix="gar-stage-") as stage:
+                    payload = Path(stage) / "payload"
+                    payload.mkdir()
+                    (payload / "run").write_text("new\n", encoding="utf-8")
+
+                    result = subprocess.run(
+                        (str(installer), "install", str(payload), str(destination), "0755"),
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        env=environment,
+                    )
+
+                self.assertEqual(2, result.returncode)
+                self.assertEqual("old\n", (destination / "old-release").read_text(encoding="utf-8"))
+                self.assertEqual([], list((root / "apps").glob("demo.gar-*")))
 
     def _exercise_contract(self, helper: Path, root: Path) -> None:
         app = root / "apps" / "demo"
@@ -193,6 +337,25 @@ class TargetLifecycleRecipeTests(unittest.TestCase):
         helper = root / f"{source.parent.parent.name}-lifecycle"
         self._write_executable(helper, content)
         return helper
+
+    def _sandbox_installer(self, source: Path, root: Path) -> Path:
+        content = source.read_text(encoding="utf-8")
+        content = content.replace("/opt/gar/apps", str(root / "apps"))
+        ownership_commands = (
+            'chown -R root:root "$temporary"',
+            'chown root:root "$marker"',
+            'chown -R 0:0 "$temporary"',
+            'chown 0:0 "$marker"',
+        )
+        replaced = False
+        for command in ownership_commands:
+            if command in content:
+                content = content.replace(command, "true")
+                replaced = True
+        self.assertTrue(replaced)
+        installer = root / f"{source.parent.parent.name}-installer"
+        self._write_executable(installer, content)
+        return installer
 
     @staticmethod
     def _write_executable(path: Path, content: str) -> None:

@@ -20,6 +20,17 @@ validate_app() {
     case "$1" in ""|.*|*[!A-Za-z0-9._-]*) fail "invalid application name" ;; esac
 }
 
+harden_application_payload() {
+    application_root=$1
+    marker="$application_root/.gar-artifact.json"
+    chmod go-w "$application_root"
+    if [ -e "$marker" ] || [ -L "$marker" ]; then
+        [ -f "$marker" ] && [ ! -L "$marker" ] || fail "artifact provenance marker must be a regular file"
+        chown 0:0 "$marker"
+        chmod 0444 "$marker"
+    fi
+}
+
 set_app_paths() {
     app=$1
     case "$app" in
@@ -83,13 +94,41 @@ case "${1:-}" in
 
         parent=$(dirname "$destination")
         temporary="${destination}.gar-new.$$"
+        backup="${destination}.gar-old.$$"
         mkdir -p "$parent"
-        rm -rf "$temporary"
-        cp -R -p "$source" "$temporary"
-        chown -R 0:0 "$temporary"
-        chmod "$mode" "$temporary"
-        rm -rf "$destination"
-        mv "$temporary" "$destination"
+        rm -rf "$temporary" "$backup"
+        cp -R -p "$source" "$temporary" || {
+            rm -rf "$temporary"
+            fail "cannot stage application payload"
+        }
+        chown -R 0:0 "$temporary" || {
+            rm -rf "$temporary"
+            fail "cannot set payload ownership"
+        }
+        chmod "$mode" "$temporary" || {
+            rm -rf "$temporary"
+            fail "cannot set payload mode"
+        }
+        case "$destination" in
+            /opt/gar/apps/*) harden_application_payload "$temporary" ;;
+        esac
+        had_destination=0
+        if [ -e "$destination" ] || [ -L "$destination" ]; then
+            mv "$destination" "$backup" || {
+                rm -rf "$temporary"
+                fail "cannot preserve previous destination"
+            }
+            had_destination=1
+        fi
+        if mv "$temporary" "$destination"; then
+            rm -rf "$backup" || true
+        else
+            if [ "$had_destination" -eq 1 ]; then
+                mv "$backup" "$destination" || fail "cannot restore previous destination"
+            fi
+            rm -rf "$temporary"
+            fail "cannot activate staged payload"
+        fi
         ;;
     register-app)
         [ "$#" -eq 2 ] || fail "usage: register-app APP_NAME"

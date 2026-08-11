@@ -30,7 +30,7 @@ class RaspberryPiTargetRecipeTest(unittest.TestCase):
             {
                 "type": "ssh-script",
                 "path": "provisioning/raspberry-pi-os-systemd",
-                "recipeVersion": 1,
+                "recipeVersion": 2,
                 "lifecycle": {
                     "type": "gar-app-lifecycle-v1",
                     "command": "/usr/local/lib/gar/gar-target-lifecycle",
@@ -48,6 +48,8 @@ class RaspberryPiTargetRecipeTest(unittest.TestCase):
         self.assertIn("gar-target-install", prepare)
         self.assertIn("gar-target-lifecycle", prepare)
         self.assertIn("/etc/gar/target-id", prepare)
+        self.assertIn("/etc/gar/recipe-version", prepare)
+        self.assertIn("identity_source", prepare)
         self.assertIn(
             "NOPASSWD: /usr/local/lib/gar/gar-target-install, "
             "/usr/local/lib/gar/gar-target-lifecycle",
@@ -56,6 +58,10 @@ class RaspberryPiTargetRecipeTest(unittest.TestCase):
         self.assertNotIn("NOPASSWD: ALL", prepare)
         installer = (RECIPE / "gar-target-install").read_text(encoding="utf-8")
         self.assertIn("register-app", installer)
+        self.assertIn('chmod 0444 "$marker"', installer)
+        self.assertIn('chmod go-w "$application_root"', installer)
+        self.assertIn('chown root:root "$marker"', installer)
+        self.assertIn('.gar-old.$$', installer)
         self.assertIn("User=gar", service)
         self.assertIn("ExecStart=/opt/gar/apps/%i/run", service)
         self.assertIn("EnvironmentFile=-/etc/gar/%i.env", service)

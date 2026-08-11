@@ -7,11 +7,12 @@ fail() {
     exit 2
 }
 
-[ "$#" -eq 4 ] || fail "usage: prepare.sh SSH_USER INSTALLER_SOURCE SERVICE_SOURCE LIFECYCLE_SOURCE"
+[ "$#" -eq 5 ] || fail "usage: prepare.sh SSH_USER INSTALLER_SOURCE SERVICE_SOURCE LIFECYCLE_SOURCE IDENTITY_SOURCE"
 ssh_user=$1
 installer_source=$2
 service_source=$3
 lifecycle_source=$4
+identity_source=$5
 
 case "$ssh_user" in
     ""|*[!A-Za-z0-9_-]*) fail "invalid SSH user" ;;
@@ -19,6 +20,7 @@ esac
 [ -f "$installer_source" ] || fail "installer payload is missing"
 [ -f "$service_source" ] || fail "systemd service template is missing"
 [ -f "$lifecycle_source" ] || fail "lifecycle helper payload is missing"
+[ -f "$identity_source" ] || fail "recipe identity payload is missing"
 
 model=$(tr -d '\000' </proc/device-tree/model 2>/dev/null || true)
 case "$model" in
@@ -70,6 +72,9 @@ sudo /usr/bin/install -D -o root -g root -m 0755 "$lifecycle_source" \
     /usr/local/lib/gar/gar-target-lifecycle
 sudo /usr/bin/install -D -o root -g root -m 0644 "$service_source" \
     /etc/systemd/system/gar-app@.service
+identity_staging=/etc/gar/.recipe-version.gar-new.$$
+sudo /usr/bin/install -o root -g root -m 0644 "$identity_source" "$identity_staging"
+sudo /bin/mv "$identity_staging" /etc/gar/recipe-version
 target_id_staging=/etc/gar/.target-id.gar-new.$$
 printf '%s\n' raspberry-pi-5 | sudo /usr/bin/tee "$target_id_staging" >/dev/null
 sudo /usr/bin/chown root:root "$target_id_staging"

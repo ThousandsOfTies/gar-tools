@@ -9,10 +9,39 @@ log_dir=/var/log/gar
 log_file="$log_dir/$app.log"
 reboot_required_file="/var/lib/gar-target/state/$app.reboot-required"
 
-is_running() {
+process_start_time() {
+    process_pid=$1
+    [ -r "/proc/$process_pid/stat" ] || return 1
+    process_stat=$(cat "/proc/$process_pid/stat" 2>/dev/null) || return 1
+    process_fields=${process_stat##*) }
+    [ "$process_fields" != "$process_stat" ] || return 1
+    set -- $process_fields
+    [ "$#" -ge 20 ] || return 1
+    shift 19
+    case "$1" in ""|*[!0-9]*) return 1 ;; esac
+    printf '%s\n' "$1"
+}
+
+read_pid_identity() {
     [ -f "$pid_file" ] || return 1
-    pid=$(cat "$pid_file" 2>/dev/null) || return 1
-    kill -0 "$pid" 2>/dev/null
+    IFS=' ' read -r pid recorded_start_time extra <"$pid_file" || return 1
+    case "$pid" in ""|*[!0-9]*) return 1 ;; esac
+    case "$recorded_start_time" in ""|*[!0-9]*) return 1 ;; esac
+    [ -z "$extra" ] && [ "$pid" -gt 1 ] 2>/dev/null
+}
+
+pid_identity_matches() {
+    kill -0 "$pid" 2>/dev/null || return 1
+    current_start_time=$(process_start_time "$pid") || return 1
+    [ "$current_start_time" = "$recorded_start_time" ]
+}
+
+is_running() {
+    if read_pid_identity && pid_identity_matches; then
+        return 0
+    fi
+    rm -f "$pid_file"
+    return 1
 }
 
 start() {
@@ -29,7 +58,15 @@ start() {
     (
         cd "$app_dir"
         "$run" >>"$log_file" 2>&1 &
-        echo $! >"$pid_file"
+        pid=$!
+        recorded_start_time=$(process_start_time "$pid") || {
+            kill "$pid" 2>/dev/null || true
+            echo "$app failed to expose a stable process identity" >&2
+            return 1
+        }
+        pid_file_temporary="${pid_file}.gar-new.$$"
+        (umask 077; printf '%s %s\n' "$pid" "$recorded_start_time" >"$pid_file_temporary")
+        mv "$pid_file_temporary" "$pid_file"
     )
     sleep 1
     if ! is_running; then
@@ -47,14 +84,13 @@ stop() {
         rm -f "$pid_file"
         return 0
     fi
-    pid=$(cat "$pid_file")
     kill "$pid" 2>/dev/null || true
     count=0
-    while kill -0 "$pid" 2>/dev/null && [ "$count" -lt 20 ]; do
+    while pid_identity_matches && [ "$count" -lt 20 ]; do
         sleep 0.1
         count=$((count + 1))
     done
-    if kill -0 "$pid" 2>/dev/null; then
+    if pid_identity_matches; then
         kill -9 "$pid" 2>/dev/null || true
     fi
     rm -f "$pid_file"
