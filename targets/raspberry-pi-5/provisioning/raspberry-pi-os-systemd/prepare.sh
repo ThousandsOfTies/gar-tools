@@ -64,7 +64,7 @@ for group in gpio spi video i2c; do
 done
 
 sudo /usr/bin/install -d -o root -g root -m 0755 \
-    /opt/gar/apps /etc/gar /var/lib/gar-target /var/lib/gar-target/state
+    /opt/gar/apps /etc/gar /etc/gar/system /var/lib/gar-target /var/lib/gar-target/state
 
 sudo /usr/bin/install -D -o root -g root -m 0755 "$installer_source" \
     /usr/local/lib/gar/gar-target-install

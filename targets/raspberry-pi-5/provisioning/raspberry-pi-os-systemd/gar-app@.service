@@ -9,6 +9,7 @@ User=gar
 Group=gar
 SupplementaryGroups=gpio spi video i2c
 EnvironmentFile=-/etc/gar/%i.env
+EnvironmentFile=-/etc/gar/system/%i.env
 WorkingDirectory=/opt/gar/apps/%i
 ExecStart=/opt/gar/apps/%i/run
 Restart=on-failure

@@ -34,6 +34,12 @@ directly because the SSH account is root. An executable application-owned
 `health` probe is optional and runs with the same root identity as the
 application.
 
+Persistent product configuration is `/etc/gar/<app>.env`. GAR system orchestration
+may atomically install root-owned mode-0644 runtime values at
+`/etc/gar/system/<app>.env`; the BusyBox launcher reads that file after the
+persistent file, so runtime keys override persistent keys for that process.
+The constrained installer owns both files and a normal artifact deploy changes neither.
+
 `reload` records a running build ID only after restart and health succeed and
 the requested ID matches schema-v2
 `/opt/gar/apps/<app>/.gar-artifact.json`. `running-build-id` returns that ID

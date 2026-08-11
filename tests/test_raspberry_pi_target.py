@@ -30,7 +30,7 @@ class RaspberryPiTargetRecipeTest(unittest.TestCase):
             {
                 "type": "ssh-script",
                 "path": "provisioning/raspberry-pi-os-systemd",
-                "recipeVersion": 2,
+                "recipeVersion": 3,
                 "lifecycle": {
                     "type": "gar-app-lifecycle-v1",
                     "command": "/usr/local/lib/gar/gar-target-lifecycle",
@@ -65,6 +65,13 @@ class RaspberryPiTargetRecipeTest(unittest.TestCase):
         self.assertIn("User=gar", service)
         self.assertIn("ExecStart=/opt/gar/apps/%i/run", service)
         self.assertIn("EnvironmentFile=-/etc/gar/%i.env", service)
+        self.assertIn("EnvironmentFile=-/etc/gar/system/%i.env", service)
+        self.assertLess(
+            service.index("EnvironmentFile=-/etc/gar/%i.env"),
+            service.index("EnvironmentFile=-/etc/gar/system/%i.env"),
+        )
+        self.assertIn("/etc/gar/system", prepare)
+        self.assertIn("/etc/gar/system/*.env", installer)
         self.assertNotIn("ConditionPathExists", service)
         self.assertIn("NoNewPrivileges=true", service)
         self.assertNotIn("gpio-sim", prepare)
@@ -92,6 +99,25 @@ class RaspberryPiTargetRecipeTest(unittest.TestCase):
 
         result = subprocess.run(
             (str(installer), "install", "/tmp/not-a-gar-stage", "/opt/gar/apps/demo/nested", "0755"),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(2, result.returncode)
+        self.assertIn("destination is not permitted", result.stderr)
+
+    def test_installer_rejects_nested_runtime_environment_paths(self) -> None:
+        installer = RECIPE / "gar-target-install"
+
+        result = subprocess.run(
+            (
+                str(installer),
+                "install",
+                "/tmp/not-a-gar-stage",
+                "/etc/gar/system/demo/nested.env",
+                "0644",
+            ),
             check=False,
             capture_output=True,
             text=True,

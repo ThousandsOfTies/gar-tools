@@ -8,6 +8,35 @@ pid_file="/var/run/gar-$app.pid"
 log_dir=/var/log/gar
 log_file="$log_dir/$app.log"
 reboot_required_file="/var/lib/gar-target/state/$app.reboot-required"
+persistent_environment_file="/etc/gar/$app.env"
+runtime_environment_file="/etc/gar/system/$app.env"
+
+load_environment_file() {
+    environment_file=$1
+    [ -e "$environment_file" ] || return 0
+    [ -f "$environment_file" ] && [ ! -L "$environment_file" ] || {
+        echo "GAR environment file is not a regular file: $environment_file" >&2
+        return 1
+    }
+    while IFS= read -r environment_line || [ -n "$environment_line" ]; do
+        case "$environment_line" in
+            ""|\#*) continue ;;
+        esac
+        environment_key=${environment_line%%=*}
+        environment_value=${environment_line#*=}
+        [ "$environment_key" != "$environment_line" ] || {
+            echo "GAR environment line is not KEY=VALUE: $environment_file" >&2
+            return 1
+        }
+        case "$environment_key" in
+            ""|[!A-Za-z_]*|*[!A-Za-z0-9_]*)
+                echo "GAR environment key is invalid: $environment_file" >&2
+                return 1
+                ;;
+        esac
+        export "$environment_key=$environment_value"
+    done <"$environment_file"
+}
 
 process_start_time() {
     process_pid=$1
@@ -57,6 +86,8 @@ start() {
     rm -f "$pid_file"
     (
         cd "$app_dir"
+        load_environment_file "$persistent_environment_file"
+        load_environment_file "$runtime_environment_file"
         "$run" >>"$log_file" 2>&1 &
         pid=$!
         recorded_start_time=$(process_start_time "$pid") || {

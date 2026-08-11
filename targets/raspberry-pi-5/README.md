@@ -38,11 +38,14 @@ recipeが削除して限定ruleへ移行します。このGAR所有file以外の
 
 - `/opt/gar/apps/<app>`
 - 必要な場合の`/etc/gar/<app>.env`
+- system が解決して一時適用する`/etc/gar/system/<app>.env`（root所有・0644）
 
 applicationは実行可能な`/opt/gar/apps/<app>/run`を提供します。GARは対応する
 `gar-app@<app>.service`をenableしてrestartします。`/etc/gar/<app>.env`は任意の
 上書き設定であり、存在する場合だけ読み込みます。PnPや安全なdefaultを持つproductは
 envなしで起動できます。
+`/etc/gar/system/<app>.env`はpersistent設定の後に読み込まれ、同じkeyはruntime値が
+優先されます。通常のapplication deployは両方のenvを変更しません。
 
 product artifactは独自のroot所有service unitを配布しません。boot統合、`gar`account、
 device group、systemd hardeningはTarget/OS recipeに集約します。product固有の永続設定は

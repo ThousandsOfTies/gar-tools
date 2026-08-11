@@ -89,7 +89,9 @@ recipeは次の3fileを持ちます。
 `gar target prepare`はrecipeを一時転送し、SSH userのsudo認証を使って実行します。
 通常の`gar target deploy`はproduct artifactをstagingした後、root所有の限定helperで
 `/opt/gar/apps/<app>`だけを更新します。product固有設定は
-`/etc/gar/<app>.env`へ分離し、再deployでは上書きしません。envは任意であり、
+`/etc/gar/<app>.env`へ分離し、再deployでは上書きしません。system orchestrationの
+一時値はroot所有の`/etc/gar/system/<app>.env`に置かれ、persistent値の後に読み込むため
+同じkeyではruntime値が優先されます。envは任意であり、
 存在する場合だけ共通serviceが読み込みます。設定不要またはPnPで動くproductは
 envなしでboot起動できます。
 

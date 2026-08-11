@@ -39,7 +39,7 @@ class LuckfoxLyraTargetTests(unittest.TestCase):
             {
                 "type": "ssh-script",
                 "path": "provisioning/buildroot-busybox",
-                "recipeVersion": 2,
+                "recipeVersion": 3,
                 "lifecycle": {
                     "type": "gar-app-lifecycle-v1",
                     "command": "/usr/local/lib/gar/gar-target-lifecycle",
@@ -78,11 +78,19 @@ class LuckfoxLyraTargetTests(unittest.TestCase):
         self.assertIn('chmod go-w "$application_root"', installer)
         self.assertIn('chown 0:0 "$marker"', installer)
         self.assertIn('.gar-old.$$', installer)
+        self.assertIn("/etc/gar/system", prepare)
+        self.assertIn("/etc/gar/system/*.env", installer)
         self.assertIn("target reboot is required", lifecycle)
         self.assertIn('rm -f "$reboot_required_file"', launcher)
         self.assertIn("@GAR_APP@", launcher)
         self.assertIn('/proc/$process_pid/stat', launcher)
         self.assertIn("recorded_start_time", launcher)
+        self.assertIn('persistent_environment_file="/etc/gar/$app.env"', launcher)
+        self.assertIn('runtime_environment_file="/etc/gar/system/$app.env"', launcher)
+        self.assertLess(
+            launcher.index('load_environment_file "$persistent_environment_file"'),
+            launcher.index('load_environment_file "$runtime_environment_file"'),
+        )
         self.assertIn("running-build-id", lifecycle)
         self.assertIn(".gar-artifact.json", lifecycle)
         self.assertNotIn("systemctl", prepare + installer + launcher + lifecycle)

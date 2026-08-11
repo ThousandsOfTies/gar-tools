@@ -44,7 +44,7 @@ esac
 
 [ "$(id -u)" -eq 0 ] || fail "RK3506 Buildroot preparation requires the root SSH account"
 
-mkdir -p /opt/gar/apps /etc/gar /usr/local/lib/gar /var/log/gar \
+mkdir -p /opt/gar/apps /etc/gar /etc/gar/system /usr/local/lib/gar /var/log/gar \
     /var/lib/gar-target/state
 cp "$installer_source" /usr/local/lib/gar/gar-target-install
 chmod 0755 /usr/local/lib/gar/gar-target-install

@@ -219,6 +219,86 @@ class TargetLifecycleRecipeTests(unittest.TestCase):
                 self.assertEqual("old\n", (destination / "old-release").read_text(encoding="utf-8"))
                 self.assertEqual([], list((root / "apps").glob("demo.gar-*")))
 
+    def test_installers_allow_only_exact_runtime_environment_destination(self) -> None:
+        for source_installer in (PI_INSTALLER, LYRA_INSTALLER):
+            with self.subTest(installer=source_installer), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                installer = self._sandbox_installer(source_installer, root)
+                runtime_destination = root / "system" / "demo.env"
+                with tempfile.TemporaryDirectory(prefix="gar-stage-") as stage:
+                    payload = Path(stage) / "payload"
+                    payload.write_text("OVERRIDE=runtime\n", encoding="utf-8")
+                    installed = self._run(installer, "install", str(payload), str(runtime_destination), "0644")
+                    nested = self._run(
+                        installer,
+                        "install",
+                        str(payload),
+                        str(root / "system" / "nested" / "demo.env"),
+                        "0644",
+                    )
+                    unsafe_mode = self._run(
+                        installer, "install", str(payload), str(runtime_destination), "0600"
+                    )
+
+                self.assertEqual(0, installed.returncode, installed.stderr)
+                self.assertEqual("OVERRIDE=runtime\n", runtime_destination.read_text(encoding="utf-8"))
+                self.assertEqual(0o644, runtime_destination.stat().st_mode & 0o777)
+                self.assertEqual(2, nested.returncode)
+                self.assertIn("destination is not permitted", nested.stderr)
+                self.assertEqual(2, unsafe_mode.returncode)
+                self.assertIn("require mode 0644", unsafe_mode.stderr)
+
+    def test_busybox_runtime_environment_overrides_persistent_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            app_dir = root / "apps" / "demo"
+            app_dir.mkdir(parents=True)
+            output = root / "environment.txt"
+            command_substitution_marker = root / "must-not-exist"
+            self._write_executable(
+                app_dir / "run",
+                "#!/bin/sh\n"
+                f"printf '%s|%s|%s|%s\\n' \"$PERSISTENT\" \"$OVERRIDE\" \"$RUNTIME\" \"$UNSAFE\" > {shlex.quote(str(output))}\n"
+                "exec sleep 30\n",
+            )
+            persistent_environment = root / "gar" / "demo.env"
+            runtime_environment = root / "gar" / "system" / "demo.env"
+            persistent_environment.parent.mkdir(parents=True)
+            runtime_environment.parent.mkdir(parents=True)
+            persistent_environment.write_text("PERSISTENT=base\nOVERRIDE=persistent\n", encoding="utf-8")
+            unsafe_value = f"$(touch {command_substitution_marker})"
+            runtime_environment.write_text(
+                f"OVERRIDE=runtime\nRUNTIME=enabled\nUNSAFE={unsafe_value}\n", encoding="utf-8"
+            )
+            launcher = self._sandbox_launcher(
+                root,
+                {
+                    'app_dir="/opt/gar/apps/$app"': f"app_dir={shlex.quote(str(app_dir))}",
+                    'pid_file="/var/run/gar-$app.pid"': f"pid_file={shlex.quote(str(root / 'gar-demo.pid'))}",
+                    "log_dir=/var/log/gar": f"log_dir={shlex.quote(str(root / 'log'))}",
+                    'reboot_required_file="/var/lib/gar-target/state/$app.reboot-required"': (
+                        f"reboot_required_file={shlex.quote(str(root / 'state' / 'demo.reboot-required'))}"
+                    ),
+                    'persistent_environment_file="/etc/gar/$app.env"': (
+                        f"persistent_environment_file={shlex.quote(str(persistent_environment))}"
+                    ),
+                    'runtime_environment_file="/etc/gar/system/$app.env"': (
+                        f"runtime_environment_file={shlex.quote(str(runtime_environment))}"
+                    ),
+                },
+            )
+            started = self._run(launcher, "start")
+            self.assertEqual(0, started.returncode, started.stderr)
+            deadline = time.monotonic() + 2
+            while not output.exists() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertEqual(
+                f"base|runtime|enabled|{unsafe_value}\n", output.read_text(encoding="utf-8")
+            )
+            self.assertFalse(command_substitution_marker.exists())
+            stopped = self._run(launcher, "stop")
+            self.assertEqual(0, stopped.returncode, stopped.stderr)
+
     def _exercise_contract(self, helper: Path, root: Path) -> None:
         app = root / "apps" / "demo"
         app.mkdir(parents=True)
@@ -341,6 +421,7 @@ class TargetLifecycleRecipeTests(unittest.TestCase):
     def _sandbox_installer(self, source: Path, root: Path) -> Path:
         content = source.read_text(encoding="utf-8")
         content = content.replace("/opt/gar/apps", str(root / "apps"))
+        content = content.replace("/etc/gar/system", str(root / "system"))
         ownership_commands = (
             'chown -R root:root "$temporary"',
             'chown root:root "$marker"',
@@ -356,6 +437,15 @@ class TargetLifecycleRecipeTests(unittest.TestCase):
         installer = root / f"{source.parent.parent.name}-installer"
         self._write_executable(installer, content)
         return installer
+
+    def _sandbox_launcher(self, root: Path, replacements: dict[str, str]) -> Path:
+        content = LYRA_LAUNCHER.read_text(encoding="utf-8").replace("app=@GAR_APP@", "app=demo", 1)
+        for original, replacement in replacements.items():
+            self.assertIn(original, content)
+            content = content.replace(original, replacement, 1)
+        launcher = root / "S95gar-demo"
+        self._write_executable(launcher, content)
+        return launcher
 
     @staticmethod
     def _write_executable(path: Path, content: str) -> None:

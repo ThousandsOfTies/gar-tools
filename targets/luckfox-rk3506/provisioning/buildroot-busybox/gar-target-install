@@ -10,6 +10,7 @@ fail() {
 valid_destination() {
     case "$1" in
         /opt/gar/apps/*) name=${1#/opt/gar/apps/} ;;
+        /etc/gar/system/*.env) name=${1#/etc/gar/system/} ;;
         /etc/gar/*.env) name=${1#/etc/gar/} ;;
         *) return 1 ;;
     esac
@@ -91,6 +92,9 @@ case "${1:-}" in
         case "$source" in /tmp/gar-stage-*/payload) ;; *) fail "staging path is not permitted" ;; esac
         [ -e "$source" ] || fail "staged source is missing"
         case "$mode" in [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) ;; *) fail "invalid mode" ;; esac
+        case "$destination" in
+            /etc/gar/system/*.env) [ "$mode" = "0644" ] || fail "runtime environment files require mode 0644" ;;
+        esac
 
         parent=$(dirname "$destination")
         temporary="${destination}.gar-new.$$"
