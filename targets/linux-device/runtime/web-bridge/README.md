@@ -5,11 +5,17 @@ One aiohttp server provides all browser-facing endpoints:
 
 - `http://HOST:8080/` — control panel
 - `http://HOST:8080/api/state` — current state and resolved hardware mapping
+- `http://HOST:8080/api/metrics/{application}` — read-only application metric JSON
 - `ws://HOST:8080/ws` — live events and panel commands
 - `GAR_HW_SIM_SOCK` — newline-delimited JSON Unix socket used by C stubs
 
 The panel derives `ws://` or `wss://` and the port from its own URL. Therefore
 only the HTTP port has to be published by Docker or forwarded over SSH.
+
+`/api/metrics/{application}` reads `${GAR_METRICS_DIR:-/run/gar/metrics}/<application>.json`.
+Application names are restricted to safe filename characters; the bridge accepts only a regular,
+non-symlink file of at most 1 MiB whose JSON root is an object. Missing and invalid files return
+a structured JSON error and never execute application code.
 
 ## Hardware mapping
 

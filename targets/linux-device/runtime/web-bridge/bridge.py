@@ -34,6 +34,7 @@ from request_validation import (
     resolve_panel_file,
     rfid_uid,
 )
+from metrics import MetricsError, load_metrics
 
 
 LOGGER = logging.getLogger("gar.hardware_bridge")
@@ -46,6 +47,7 @@ COMPONENTS_DIR = Path(__file__).parent / "components"
 # here.  Reading it for each request deliberately makes `gar sim app deploy`
 # switch a screen without restarting the bridge or the simulated hardware.
 PANEL_DIR_CONFIG = Path("/etc/gar/panel-dir")
+METRICS_DIR = Path(os.environ.get("GAR_METRICS_DIR", "/run/gar/metrics"))
 
 
 def _allowed_http_hosts() -> frozenset[str]:
@@ -787,6 +789,18 @@ async def api_state(_request: web.Request) -> web.Response:
     return web.json_response(state)
 
 
+async def api_metrics(request: web.Request) -> web.Response:
+    application = request.match_info.get("application", "")
+    try:
+        payload = load_metrics(METRICS_DIR, application)
+    except MetricsError as error:
+        return web.json_response(
+            {"ok": False, "error": {"code": error.code, "message": str(error)}},
+            status=error.status,
+        )
+    return web.json_response(payload)
+
+
 async def api_button(request: web.Request) -> web.Response:
     data = await _request_data(request)
     line = _button_line(data)
@@ -957,6 +971,7 @@ def create_application() -> web.Application:
     )
     application.router.add_get("/ws", websocket_handler)
     application.router.add_get("/api/state", api_state)
+    application.router.add_get("/api/metrics/{application}", api_metrics)
     application.router.add_post("/api/button", api_button)
     application.router.add_post("/api/button/press", api_button_press)
     application.router.add_post("/api/rfid/tap", api_rfid_tap)

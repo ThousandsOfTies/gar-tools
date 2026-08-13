@@ -48,6 +48,7 @@ def _bridge_environment(
             "GAR_HARDWARE_DIR": str(hardware_dir),
             "GAR_RUNTIME_DIR": str(runtime_dir),
             "GAR_HW_SIM_SOCK": str(unix_socket),
+            "GAR_METRICS_DIR": str(runtime_dir / "metrics"),
             "PYTHONDONTWRITEBYTECODE": "1",
         }
     )
@@ -234,6 +235,19 @@ async def check_hardware_directory(hardware_dir: Path) -> None:
                         assert response.status == 200
                         assert "Virtual Hardware Panel" in await response.text()
 
+                    metrics_dir = runtime_dir / "metrics"
+                    metrics_dir.mkdir()
+                    (metrics_dir / "gar-stream-test.json").write_text(
+                        json.dumps({"frames": {"sent": 1}}), encoding="utf-8"
+                    )
+                    async with session.get(f"{base_url}/api/metrics/gar-stream-test") as response:
+                        assert response.status == 200
+                        assert await response.json() == {"frames": {"sent": 1}}
+                    async with session.get(f"{base_url}/api/metrics/missing") as response:
+                        assert response.status == 404
+                        missing_metrics = await response.json()
+                        assert missing_metrics["error"]["code"] == "metrics_not_found"
+
                     async with session.ws_connect(
                         f"{base_url}/ws", origin=base_url
                     ) as websocket:
@@ -358,6 +372,16 @@ async def check_hardware_directory(hardware_dir: Path) -> None:
                         finally:
                             for idle_client in idle_clients:
                                 idle_client.close()
+                    else:
+                        async with session.post(
+                            f"{base_url}/api/rotary/rotate", json={"direction": 1}
+                        ) as response:
+                            assert response.status == 200
+                        async with session.post(f"{base_url}/api/rotary/press", json={}) as response:
+                            assert response.status == 200
+                        async with session.get(f"{base_url}/api/state") as response:
+                            rotary_state = await response.json()
+                        assert rotary_state["gpio"]["rotary"]["counter"] == 1
 
                     second_environment = dict(environment)
                     second_environment["GAR_BRIDGE_PORT"] = str(_free_tcp_port())
