@@ -30,7 +30,7 @@ class RaspberryPiTargetRecipeTest(unittest.TestCase):
             {
                 "type": "ssh-script",
                 "path": "provisioning/raspberry-pi-os-systemd",
-                "recipeVersion": 4,
+                "recipeVersion": 5,
                 "lifecycle": {
                     "type": "gar-app-lifecycle-v1",
                     "command": "/usr/local/lib/gar/gar-target-lifecycle",
@@ -45,6 +45,7 @@ class RaspberryPiTargetRecipeTest(unittest.TestCase):
         lifecycle = (RECIPE / "gar-target-lifecycle").read_text(encoding="utf-8")
 
         self.assertIn("Raspberry Pi 5", prepare)
+        self.assertNotIn('fail "runuser is required"', prepare)
         self.assertIn("gar-target-install", prepare)
         self.assertIn("gar-target-lifecycle", prepare)
         self.assertIn("/etc/gar/target-id", prepare)

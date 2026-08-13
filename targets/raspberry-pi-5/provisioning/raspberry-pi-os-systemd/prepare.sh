@@ -38,7 +38,10 @@ esac
 
 command -v systemctl >/dev/null || fail "systemd is required"
 command -v sudo >/dev/null || fail "sudo is required"
-command -v runuser >/dev/null || fail "runuser is required"
+# The application service has User=gar, so normal product startup does not
+# require util-linux's runuser binary.  Keep prepare compatible with minimal
+# Raspberry Pi OS installations; runuser is needed only if a product later
+# supplies an optional lifecycle health hook.
 
 runtime_packages="python3 python3-gi python3-spidev python3-periphery gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-tools gstreamer1.0-plugins-good gstreamer1.0-plugins-bad v4l-utils"
 missing_packages=""
