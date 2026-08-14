@@ -64,7 +64,10 @@ def _allowed_http_hosts() -> frozenset[str]:
 ALLOWED_HTTP_HOSTS = _allowed_http_hosts()
 
 MAX_BROWSER_MESSAGE_BYTES = 64 * 1024
-MAX_CAMERA_FRAME_BYTES = 2 * 1024 * 1024
+# A 2048x1536 JPEG from a real UVC camera can exceed 2 MiB for detailed scenes.
+# Keep a finite per-frame limit, while allowing the native 3 MP GarStream camera
+# mode to reach the simulator without an artificial downscale.
+MAX_CAMERA_FRAME_BYTES = 8 * 1024 * 1024
 MAX_STUB_LINE_BYTES = 2 * 1024 * 1024
 MAX_PIXEL_DATA_CHARS = 1_500_000
 MAX_BUTTON_PRESS_MS = 10_000
@@ -857,12 +860,42 @@ async def api_rotary_press(_request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
-def _camera_pipeline_command() -> tuple[str, ...]:
-    width = os.environ.get("GAR_CAMERA_WIDTH", "640")
-    height = os.environ.get("GAR_CAMERA_HEIGHT", "480")
+def _camera_input_settings(request: web.Request) -> tuple[int, int, int]:
+    """Validate the V4L2 mode requested by a browser camera producer.
+
+    The app selects its native V4L2 mode in its simulation service.  The
+    browser supplies the same mode explicitly, rather than silently scaling a
+    3 MP UVC source down to the Bridge's historic 640x480 default.
+    """
+    width = bounded_int(
+        request.query,
+        "width",
+        default=int(os.environ.get("GAR_CAMERA_WIDTH", "640")),
+        minimum=160,
+        maximum=4096,
+    )
+    height = bounded_int(
+        request.query,
+        "height",
+        default=int(os.environ.get("GAR_CAMERA_HEIGHT", "480")),
+        minimum=120,
+        maximum=3072,
+    )
+    fps = bounded_int(
+        request.query,
+        "fps",
+        default=int(os.environ.get("GAR_CAMERA_FPS", "30")),
+        minimum=1,
+        maximum=60,
+    )
+    if width * height > 4_194_304:
+        raise RequestValidationError("camera frame must not exceed 4194304 pixels")
+    return width, height, fps
+
+
+def _camera_pipeline_command(width: int, height: int, fps: int) -> tuple[str, ...]:
     # v4l2loopback defaults to 30 fps. videorate duplicates the browser's
     # 15 fps input so the capture side can negotiate the device default.
-    fps = os.environ.get("GAR_CAMERA_FPS", "30")
     device = os.environ.get("GAR_CAMERA_DEVICE", "/dev/video0")
     return (
         "gst-launch-1.0",
@@ -889,37 +922,54 @@ def _camera_pipeline_command() -> tuple[str, ...]:
 
 async def camera_input_websocket(request: web.Request) -> web.WebSocketResponse:
     """Feed browser JPEG frames into the V4L2 camera used by the target app."""
+    width, height, fps = _camera_input_settings(request)
     socket = web.WebSocketResponse(max_msg_size=MAX_CAMERA_FRAME_BYTES)
     await socket.prepare(request)
     if camera_input_lock.locked():
-        await socket.send_json({"type": "error", "error": "another camera input is active"})
+        await socket.send_json(
+            {"type": "error", "error": "another camera input is active"}
+        )
         await socket.close()
         return socket
 
     async with camera_input_lock:
         device = os.environ.get("GAR_CAMERA_DEVICE", "/dev/video0")
         if not Path(device).exists():
-            await socket.send_json({"type": "error", "error": f"camera device is unavailable: {device}"})
+            await socket.send_json(
+                {"type": "error", "error": f"camera device is unavailable: {device}"}
+            )
             await socket.close()
             return socket
         try:
             process = await asyncio.create_subprocess_exec(
-                *_camera_pipeline_command(),
+                *_camera_pipeline_command(width, height, fps),
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.DEVNULL,
             )
         except OSError as exc:
-            await socket.send_json({"type": "error", "error": f"cannot start camera pipeline: {exc}"})
+            await socket.send_json(
+                {"type": "error", "error": f"cannot start camera pipeline: {exc}"}
+            )
             await socket.close()
             return socket
 
-        await socket.send_json({"type": "ready", "device": device})
+        await socket.send_json(
+            {
+                "type": "ready",
+                "device": device,
+                "width": width,
+                "height": height,
+                "fps": fps,
+            }
+        )
         try:
             async for incoming in socket:
                 if incoming.type != WSMsgType.BINARY:
                     continue
                 if process.returncode is not None or process.stdin is None:
-                    await socket.send_json({"type": "error", "error": "camera pipeline stopped"})
+                    await socket.send_json(
+                        {"type": "error", "error": "camera pipeline stopped"}
+                    )
                     break
                 process.stdin.write(incoming.data)
                 await process.stdin.drain()
@@ -939,7 +989,9 @@ async def camera_input_websocket(request: web.Request) -> web.WebSocketResponse:
 async def panel_file_handler(request: web.Request) -> web.Response:
     request_path = request.match_info.get("path_info", "")
     if request_path.startswith("components/"):
-        file_path = resolve_panel_file(COMPONENTS_DIR, request_path.removeprefix("components/"))
+        file_path = resolve_panel_file(
+            COMPONENTS_DIR, request_path.removeprefix("components/")
+        )
     else:
         file_path = resolve_panel_file(_active_panel_dir(), request_path)
     if file_path is None:

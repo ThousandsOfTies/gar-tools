@@ -1,11 +1,21 @@
-const CAMERA_WIDTH = 640;
-const CAMERA_HEIGHT = 480;
-const CAMERA_FPS = 15;
+const DEFAULT_CAMERA_WIDTH = 640;
+const DEFAULT_CAMERA_HEIGHT = 480;
+const DEFAULT_CAPTURE_FPS = 15;
+const DEFAULT_DEVICE_FPS = 30;
+
+function positiveIntegerAttribute(element, name, fallback) {
+  const value = Number.parseInt(element.getAttribute(name) ?? "", 10);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
 
 class GarVideoTransmitter extends HTMLElement {
-  #socket; #stream; #frameTimer; #encoding = false;
+  #socket; #stream; #frameTimer; #encoding = false; #width; #height; #captureFps; #deviceFps;
 
   connectedCallback() {
+    this.#width = positiveIntegerAttribute(this, "width", DEFAULT_CAMERA_WIDTH);
+    this.#height = positiveIntegerAttribute(this, "height", DEFAULT_CAMERA_HEIGHT);
+    this.#captureFps = positiveIntegerAttribute(this, "capture-fps", DEFAULT_CAPTURE_FPS);
+    this.#deviceFps = positiveIntegerAttribute(this, "device-fps", DEFAULT_DEVICE_FPS);
     this.innerHTML = `<section><span class="label">PC CAMERA → TX EC2 /dev/video0</span><video autoplay muted playsinline></video><div class="camera-controls"><select aria-label="Camera"><option value="">Default camera</option></select><button>Start camera</button></div><output>Camera is stopped</output></section>`;
     this.querySelector("button").addEventListener("click", () => this.start());
     this.querySelector("select").addEventListener("change", () => { if (this.#stream) this.start(); });
@@ -27,9 +37,11 @@ class GarVideoTransmitter extends HTMLElement {
       const deviceId = this.querySelector("select").value;
       this.#stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: CAMERA_WIDTH },
-          height: { ideal: CAMERA_HEIGHT },
-          frameRate: { ideal: CAMERA_FPS },
+          // Match the app's native V4L2 contract.  Falling back to 640x480
+          // would make High quality / Maximum profiles only upscale pixels.
+          width: { exact: this.#width },
+          height: { exact: this.#height },
+          frameRate: { ideal: this.#captureFps },
           ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
         },
         audio: false,
@@ -56,13 +68,14 @@ class GarVideoTransmitter extends HTMLElement {
 
   #connectCameraInput() {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const socket = new WebSocket(`${protocol}//${location.host}/camera-input/ws`);
+    const query = new URLSearchParams({width: this.#width, height: this.#height, fps: this.#deviceFps});
+    const socket = new WebSocket(`${protocol}//${location.host}/camera-input/ws?${query}`);
     this.#socket = socket;
     socket.addEventListener("open", () => this.#setStatus("Connecting to Tx EC2 camera device…"));
     socket.addEventListener("message", ({ data }) => {
       const message = JSON.parse(data);
       if (message.type === "ready") {
-        this.#setStatus(`Streaming to Tx EC2 ${message.device}`);
+        this.#setStatus(`Streaming ${message.width}×${message.height}@${message.fps} to Tx EC2 ${message.device}`);
         this.#startFramePump();
       } else if (message.type === "error") {
         this.#setStatus(`Camera input error: ${message.error}`);
@@ -76,15 +89,15 @@ class GarVideoTransmitter extends HTMLElement {
   #startFramePump() {
     clearInterval(this.#frameTimer);
     const canvas = document.createElement("canvas");
-    canvas.width = CAMERA_WIDTH;
-    canvas.height = CAMERA_HEIGHT;
+    canvas.width = this.#width;
+    canvas.height = this.#height;
     const context = canvas.getContext("2d");
     this.#frameTimer = setInterval(() => {
       if (this.#encoding || this.#socket?.readyState !== WebSocket.OPEN) return;
       const video = this.querySelector("video");
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
       this.#encoding = true;
-      context.drawImage(video, 0, 0, CAMERA_WIDTH, CAMERA_HEIGHT);
+      context.drawImage(video, 0, 0, this.#width, this.#height);
       canvas.toBlob(async (blob) => {
         try {
           if (blob && this.#socket?.readyState === WebSocket.OPEN) this.#socket.send(await blob.arrayBuffer());
@@ -92,7 +105,7 @@ class GarVideoTransmitter extends HTMLElement {
           this.#encoding = false;
         }
       }, "image/jpeg", 0.82);
-    }, 1000 / CAMERA_FPS);
+    }, 1000 / this.#captureFps);
   }
 
   #stopPipeline() {
