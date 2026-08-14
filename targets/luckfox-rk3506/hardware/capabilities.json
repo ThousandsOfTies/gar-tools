@@ -36,11 +36,11 @@
         10
       ],
       "line_pins": {
-        "2": "RM_IO2",
-        "3": "RM_IO3",
-        "8": "RM_IO8",
-        "9": "RM_IO9",
-        "10": "RM_IO10"
+        "2": "20:RM_IO2",
+        "3": "19:RM_IO3",
+        "8": "12:RM_IO8",
+        "9": "11:RM_IO9",
+        "10": "10:RM_IO10"
       },
       "directions": [
         "input",
@@ -70,10 +70,10 @@
       "max_speed_hz": 40000000,
       "modes": [0, 1, 2, 3],
       "signal_pins": {
-        "MOSI": "RM_IO6",
-        "MISO": "RM_IO5",
-        "SCLK": "RM_IO7",
-        "CS0": "RM_IO4"
+        "MOSI": "15:RM_IO6",
+        "MISO": "16:RM_IO5",
+        "SCLK": "14:RM_IO7",
+        "CS0": "17:RM_IO4"
       }
     },
     {

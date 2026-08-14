@@ -11,12 +11,14 @@ TARGETS = {
         "resources": ("gpio0", "spi0.cs0", "usb-uvc", "network0"),
         "gpio_lines": (17, 22, 23, 24, 27),
         "spi_max_speed_hz": 50_000_000,
+        "recipe_version": 5,
         "platform": ("aarch64", "gnu", "aarch64-linux-gnu", "systemd", "sudo-noninteractive"),
     },
     "luckfox-rk3506": {
         "resources": ("gpio0", "spi0.cs0", "network0"),
         "gpio_lines": (2, 3, 8, 9, 10),
         "spi_max_speed_hz": 40_000_000,
+        "recipe_version": 4,
         "platform": ("armv7l", "gnueabihf", "arm-buildroot-linux-gnueabihf", "busybox", "root"),
     },
 }
@@ -36,7 +38,7 @@ class TargetCapabilityTests(unittest.TestCase):
                 self.assertEqual(target_id, capability["target_id"])
                 self.assertEqual(target_id, manifest["id"])
                 self.assertEqual(
-                    4,
+                    expected["recipe_version"],
                     manifest["provisioning"]["ssh_scp"]["recipeVersion"],
                 )
                 platform = capability["platform"]
