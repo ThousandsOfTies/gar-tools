@@ -25,7 +25,7 @@
     "ssh_scp": {
       "type": "ssh-script",
       "path": "provisioning/buildroot-busybox",
-      "recipeVersion": 4,
+      "recipeVersion": 5,
       "lifecycle": {
         "type": "gar-app-lifecycle-v1",
         "command": "/usr/local/lib/gar/gar-target-lifecycle"

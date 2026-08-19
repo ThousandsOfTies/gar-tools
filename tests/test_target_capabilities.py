@@ -11,14 +11,14 @@ TARGETS = {
         "resources": ("gpio0", "spi0.cs0", "usb-uvc", "network0"),
         "gpio_lines": (17, 22, 23, 24, 27),
         "spi_max_speed_hz": 50_000_000,
-        "recipe_version": 5,
+        "recipe_version": 6,
         "platform": ("aarch64", "gnu", "aarch64-linux-gnu", "systemd", "sudo-noninteractive"),
     },
     "luckfox-rk3506": {
         "resources": ("gpio0", "spi0.cs0", "network0"),
         "gpio_lines": (2, 3, 8, 9, 10),
         "spi_max_speed_hz": 40_000_000,
-        "recipe_version": 4,
+        "recipe_version": 5,
         "platform": ("armv7l", "gnueabihf", "arm-buildroot-linux-gnueabihf", "busybox", "root"),
     },
 }

@@ -72,8 +72,11 @@ is_healthy() {
 }
 
 deployed_build_id() {
-    metadata="$(app_dir)/.gar-artifact.json"
-    [ -r "$metadata" ] || unhealthy "artifact provenance marker is missing: $metadata"
+    metadata="$(app_dir)/.artifact-info.json"
+    if [ ! -r "$metadata" ]; then
+        metadata="$(app_dir)/.gar-artifact.json"
+    fi
+    [ -r "$metadata" ] || unhealthy "artifact provenance marker is missing: $(app_dir)/.artifact-info.json"
     payload=$(tr -d '\r\n' <"$metadata") || unhealthy "artifact provenance marker cannot be read: $metadata"
     schema=$(printf '%s\n' "$payload" | sed -n 's/.*"schema_version"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p')
     kind=$(printf '%s\n' "$payload" | sed -n 's/.*"kind"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')

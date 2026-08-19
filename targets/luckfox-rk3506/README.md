@@ -42,7 +42,7 @@ The constrained installer owns both files and a normal artifact deploy changes n
 
 `reload` records a running build ID only after restart and health succeed and
 the requested ID matches schema-v2
-`/opt/gar/apps/<app>/.gar-artifact.json`. `running-build-id` returns that ID
+`/opt/gar/apps/<app>/.artifact-info.json`. `running-build-id` returns that ID
 only while the application remains healthy and the deployed marker still
 matches. This detects the important case where new files were placed but an
 old process is still running.

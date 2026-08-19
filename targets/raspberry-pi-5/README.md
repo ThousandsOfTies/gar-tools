@@ -74,7 +74,7 @@ gar-target-lifecycle running-build-id APP
 
 通常userのSSH接続ではGARが限定sudoers ruleを通して`sudo -n`でhelperを呼びます。
 `reload`はservice restartとhealth確認が成功し、deployed
-`/opt/gar/apps/APP/.gar-artifact.json`のschema v2 build IDと一致した場合だけ、
+`/opt/gar/apps/APP/.artifact-info.json`のschema v2 build IDと一致した場合だけ、
 health確認済みIDを記録します。`running-build-id`はserviceがhealthyで、記録IDと
 deployed markerが一致する場合だけIDを返します。artifactに実行可能な`health`が
 あれば、serviceと同じ`gar` userで追加probeとして実行します。

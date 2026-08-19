@@ -30,7 +30,7 @@ class RaspberryPiTargetRecipeTest(unittest.TestCase):
             {
                 "type": "ssh-script",
                 "path": "provisioning/raspberry-pi-os-systemd",
-                "recipeVersion": 5,
+                "recipeVersion": 6,
                 "lifecycle": {
                     "type": "gar-app-lifecycle-v1",
                     "command": "/usr/local/lib/gar/gar-target-lifecycle",
@@ -78,7 +78,7 @@ class RaspberryPiTargetRecipeTest(unittest.TestCase):
         self.assertNotIn("gpio-sim", prepare)
         self.assertIn("/usr/bin/systemctl", lifecycle)
         self.assertIn("/usr/bin/journalctl", lifecycle)
-        self.assertIn(".gar-artifact.json", lifecycle)
+        self.assertIn(".artifact-info.json", lifecycle)
         self.assertIn("running-build-id", lifecycle)
         self.assertIn("--build-id", lifecycle)
 

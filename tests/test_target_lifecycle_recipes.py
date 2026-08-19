@@ -59,6 +59,13 @@ class TargetLifecycleRecipeTests(unittest.TestCase):
             self.assertIn("target reboot is required", reboot_required.stderr)
             self.assertFalse((root / "state" / "demo.build-id").exists())
 
+    def test_lifecycle_keeps_reading_the_legacy_marker_name(self) -> None:
+        for sandbox_factory in (self._systemd_sandbox, self._busybox_sandbox):
+            with self.subTest(sandbox=sandbox_factory.__name__), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                helper = sandbox_factory(root)
+                self._exercise_contract(helper, root, marker_name=".gar-artifact.json")
+
     def test_helpers_reject_unsafe_application_names_and_build_ids(self) -> None:
         for helper in (PI_HELPER, LYRA_HELPER):
             with self.subTest(helper=helper):
@@ -170,7 +177,7 @@ class TargetLifecycleRecipeTests(unittest.TestCase):
                 with tempfile.TemporaryDirectory(prefix="gar-stage-") as stage:
                     payload = Path(stage) / "payload"
                     payload.mkdir()
-                    marker = payload / ".gar-artifact.json"
+                    marker = payload / ".artifact-info.json"
                     marker.write_text('{"build_id":"build:one"}\n', encoding="utf-8")
                     marker.chmod(0o666)
                     run = payload / "run"
@@ -186,7 +193,7 @@ class TargetLifecycleRecipeTests(unittest.TestCase):
 
                 self.assertEqual(0, result.returncode, result.stderr)
                 self.assertEqual(0, destination.stat().st_mode & 0o022)
-                self.assertEqual(0o444, (destination / ".gar-artifact.json").stat().st_mode & 0o777)
+                self.assertEqual(0o444, (destination / ".artifact-info.json").stat().st_mode & 0o777)
                 self.assertEqual(0o751, (destination / "run").stat().st_mode & 0o777)
 
     def test_installers_keep_previous_destination_when_staging_copy_fails(self) -> None:
@@ -299,12 +306,18 @@ class TargetLifecycleRecipeTests(unittest.TestCase):
             stopped = self._run(launcher, "stop")
             self.assertEqual(0, stopped.returncode, stopped.stderr)
 
-    def _exercise_contract(self, helper: Path, root: Path) -> None:
+    def _exercise_contract(
+        self,
+        helper: Path,
+        root: Path,
+        *,
+        marker_name: str = ".artifact-info.json",
+    ) -> None:
         app = root / "apps" / "demo"
         app.mkdir(parents=True)
         self._write_executable(app / "run", "#!/bin/sh\nexit 0\n")
         self._write_executable(app / "health", "#!/bin/sh\nexit 0\n")
-        marker = app / ".gar-artifact.json"
+        marker = app / marker_name
         marker.write_text(
             json.dumps(
                 {

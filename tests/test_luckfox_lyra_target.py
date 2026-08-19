@@ -39,7 +39,7 @@ class LuckfoxLyraTargetTests(unittest.TestCase):
             {
                 "type": "ssh-script",
                 "path": "provisioning/buildroot-busybox",
-                "recipeVersion": 4,
+                "recipeVersion": 5,
                 "lifecycle": {
                     "type": "gar-app-lifecycle-v1",
                     "command": "/usr/local/lib/gar/gar-target-lifecycle",
@@ -92,7 +92,7 @@ class LuckfoxLyraTargetTests(unittest.TestCase):
             launcher.index('load_environment_file "$runtime_environment_file"'),
         )
         self.assertIn("running-build-id", lifecycle)
-        self.assertIn(".gar-artifact.json", lifecycle)
+        self.assertIn(".artifact-info.json", lifecycle)
         self.assertNotIn("systemctl", prepare + installer + launcher + lifecycle)
         self.assertNotIn("sudo", prepare + installer + launcher + lifecycle)
 
