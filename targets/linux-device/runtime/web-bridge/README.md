@@ -9,6 +9,12 @@ One aiohttp server provides all browser-facing endpoints:
 - `ws://HOST:8080/ws` — live events and panel commands
 - `GAR_HW_SIM_SOCK` — newline-delimited JSON Unix socket used by C stubs
 
+Files under the shared runtime's `components/` directory take precedence at
+`/components/*`. If a shared component with that name does not exist, the
+request falls back to the active Product panel. This lets a Product ship Web
+Components under its own `panel/components/` directory without copying them
+into reusable target tooling.
+
 The panel derives `ws://` or `wss://` and the port from its own URL. Therefore
 only the HTTP port has to be published by Docker or forwarded over SSH.
 
@@ -29,6 +35,12 @@ names give GPIOs their bridge-specific meaning:
 | Rotary phase B / data | `encoder_b`, `rotary_b`, `rotary_dt`, `ky040_b`, `ky040_dt` |
 | Rotary switch | `encoder_sw`, `rotary_sw`, `ky040_sw` |
 | Display data/command | `lcd_dc`, `display_dc`, `ili9341_dc` |
+
+The reusable I2C stub also models a PCA9685 at its default address `0x40`.
+Register writes are published as `state.i2c.pca9685` and live `pca9685`
+WebSocket messages. A Product opts into that model with `sim=pca9685` in its
+`i2c.csv`; Product panels decide how many output channels are connected to
+physical actuators.
 
 The rotary mapping is accepted only when all three rotary lines are present.
 GPIO rows with role `button` or `led` become the corresponding panel controls.

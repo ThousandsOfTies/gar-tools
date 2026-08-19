@@ -6,8 +6,8 @@ TEST_CFLAGS = -std=c11 -Wall -Wextra -Werror -pedantic
 
 # ARM build from this subdirectory: make CC=aarch64-linux-gnu-gcc
 
-SRCS = cuse_i2c.c vl53l0x_sim.c ssd1306_sim.c
-HEADERS = i2c_rdwr_plan.h vl53l0x_sim.h ssd1306_sim.h
+SRCS = cuse_i2c.c pca9685_sim.c vl53l0x_sim.c ssd1306_sim.c
+HEADERS = i2c_rdwr_plan.h pca9685_sim.h vl53l0x_sim.h ssd1306_sim.h
 BIN  = cuse_i2c
 
 $(BIN): $(SRCS) $(HEADERS)
@@ -27,9 +27,12 @@ run-user: $(BIN)
 # Pure transfer-planning checks; no CUSE device or root privileges required.
 check:
 	@set -e; \
-	tmp_bin=$$(mktemp /tmp/gar-i2c-rdwr-test.XXXXXX); \
-	trap 'rm -f "$$tmp_bin"' EXIT; \
-	$(HOSTCC) $(TEST_CFLAGS) -o "$$tmp_bin" test_i2c_rdwr_plan.c; \
-	"$$tmp_bin"
+	plan_bin=$$(mktemp /tmp/gar-i2c-rdwr-test.XXXXXX); \
+	pca_bin=$$(mktemp /tmp/gar-pca9685-test.XXXXXX); \
+	trap 'rm -f "$$plan_bin" "$$pca_bin"' EXIT; \
+	$(HOSTCC) $(TEST_CFLAGS) -o "$$plan_bin" test_i2c_rdwr_plan.c; \
+	$(HOSTCC) $(TEST_CFLAGS) -o "$$pca_bin" test_pca9685_sim.c pca9685_sim.c; \
+	"$$plan_bin"; \
+	"$$pca_bin"
 
 .PHONY: clean run run-user check

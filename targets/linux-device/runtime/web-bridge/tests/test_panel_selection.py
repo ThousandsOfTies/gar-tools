@@ -40,6 +40,27 @@ class PanelSelectionTests(unittest.TestCase):
             with patch.object(bridge, "PANEL_DIR_CONFIG", config):
                 self.assertEqual(bridge.PANEL_DIR, bridge._active_panel_dir())
 
+    def test_product_component_is_resolved_after_shared_component(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir)
+            application_panel = root / "app-panel"
+            product_components = application_panel / "components"
+            product_components.mkdir(parents=True)
+            product_component = product_components / "servo.js"
+            product_component.write_text("product", encoding="utf-8")
+            config = root / "panel-dir"
+            config.write_text(f"{application_panel}\n", encoding="utf-8")
+
+            with patch.object(bridge, "PANEL_DIR_CONFIG", config):
+                self.assertEqual(
+                    product_component,
+                    bridge._resolve_panel_request("components/servo.js"),
+                )
+                self.assertEqual(
+                    bridge.COMPONENTS_DIR / "bridge-status.js",
+                    bridge._resolve_panel_request("components/bridge-status.js"),
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

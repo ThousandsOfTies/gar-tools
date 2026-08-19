@@ -35,6 +35,7 @@ aux_button,/dev/gpiochip0,27,input,button,high,,pull-down,pull,test auxiliary bu
         "i2c.csv": """name,bus,dev,address,driver,sim,description
 display,1,/dev/i2c-1,0x3c,ssd1306,ssd1306,test display
 range,1,/dev/i2c-1,0x29,vl53l0x,vl53l0x,test range sensor
+servo,1,/dev/i2c-1,0x40,pca9685,pca9685,test PWM controller
 """,
         "spi.csv": """name,bus,chip_select,dev,mode,max_speed_hz,driver,sim,description
 rfid,0,0,/dev/spidev0.0,0,1000000,mfrc522,mfrc522,test RFID reader
@@ -354,6 +355,35 @@ async def check_hardware_directory(hardware_dir: Path) -> None:
                         _unix_exchange, unix_socket, unix_request
                     )
                     assert unix_response == {"value": 0}
+                    if target_name == "linux-device":
+                        channels = [
+                            {
+                                "channel": channel,
+                                "on": 0,
+                                "off": 307 if channel == 0 else 0,
+                                "fullOn": False,
+                                "fullOff": False,
+                            }
+                            for channel in range(16)
+                        ]
+                        await asyncio.to_thread(
+                            _unix_exchange_many,
+                            unix_socket,
+                            [
+                                {
+                                    "event": "set",
+                                    "device": "pca9685",
+                                    "address": 0x40,
+                                    "frequencyHz": 50.0,
+                                    "channels": channels,
+                                },
+                                unix_request,
+                            ],
+                        )
+                        async with session.get(f"{base_url}/api/state") as response:
+                            servo_state = await response.json()
+                        assert servo_state["i2c"]["pca9685"]["frequencyHz"] == 50.0
+                        assert servo_state["i2c"]["pca9685"]["channels"][0]["off"] == 307
                     invalid_unix_response = await asyncio.to_thread(
                         _unix_exchange,
                         unix_socket,

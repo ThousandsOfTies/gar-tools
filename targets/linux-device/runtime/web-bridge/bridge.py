@@ -31,6 +31,7 @@ from request_validation import (
     browser_request_allowed,
     configured_line,
     parse_json_object,
+    pca9685_state,
     resolve_panel_file,
     rfid_uid,
 )
@@ -106,6 +107,20 @@ state: dict[str, object] = {
     "i2c": {
         "vl53l0x": {"range_mm": 300, "status": 0x01},
         "ssd1306": {"framebuf": None},
+        "pca9685": {
+            "address": 0x40,
+            "frequencyHz": None,
+            "channels": [
+                {
+                    "channel": channel,
+                    "on": 0,
+                    "off": 0,
+                    "fullOn": False,
+                    "fullOff": True,
+                }
+                for channel in range(16)
+            ],
+        },
     },
     "spi": {
         "mfrc522": {"uid": None, "present": False},
@@ -524,6 +539,14 @@ def handle_stub_message(raw: str, loop: asyncio.AbstractEventLoop) -> str | None
             assert isinstance(oled, dict)
             oled["framebuf"] = frame_buffer
             _schedule_broadcast({"type": "oled", "framebuf": frame_buffer}, loop)
+
+        elif event == "set" and device == "pca9685":
+            _require_device("pca9685")
+            controller = pca9685_state(message)
+            i2c_state = state["i2c"]
+            assert isinstance(i2c_state, dict)
+            i2c_state["pca9685"] = controller
+            _schedule_broadcast({"type": "pca9685", **controller}, loop)
 
         elif event == "set" and device == "ili9341":
             _require_device("ili9341")
@@ -988,15 +1011,21 @@ async def camera_input_websocket(request: web.Request) -> web.WebSocketResponse:
 
 async def panel_file_handler(request: web.Request) -> web.Response:
     request_path = request.match_info.get("path_info", "")
+    file_path = _resolve_panel_request(request_path)
+    if file_path is None:
+        return web.Response(status=404, text="Not found")
+    return web.FileResponse(file_path, headers={"Cache-Control": "no-store"})
+
+
+def _resolve_panel_request(request_path: str) -> Path | None:
+    """Resolve shared components first, then files owned by the active panel."""
     if request_path.startswith("components/"):
         file_path = resolve_panel_file(
             COMPONENTS_DIR, request_path.removeprefix("components/")
         )
-    else:
-        file_path = resolve_panel_file(_active_panel_dir(), request_path)
-    if file_path is None:
-        return web.Response(status=404, text="Not found")
-    return web.FileResponse(file_path, headers={"Cache-Control": "no-store"})
+        if file_path is not None:
+            return file_path
+    return resolve_panel_file(_active_panel_dir(), request_path)
 
 
 def _active_panel_dir() -> Path:

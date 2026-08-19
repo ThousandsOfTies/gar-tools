@@ -34,6 +34,7 @@
 #include <stdint.h>
 
 #include "i2c_rdwr_plan.h"
+#include "pca9685_sim.h"
 #include "vl53l0x_sim.h"
 #include "ssd1306_sim.h"
 
@@ -59,6 +60,7 @@ typedef struct {
 } sim_device_t;
 
 static const sim_device_t sim_devices[] = {
+    { PCA9685_SIM_ADDR, pca9685_sim_read_reg, pca9685_sim_write_reg, NULL },
     { VL53L0X_ADDR,    vl53l0x_sim_read_reg, vl53l0x_sim_write_reg, NULL },
     { SSD1306_SIM_ADDR, NULL,                NULL,                  ssd1306_sim_write },
     { 0, NULL, NULL, NULL }
@@ -393,6 +395,7 @@ int main(int argc, char *argv[]) {
 
     struct fuse_args args = FUSE_ARGS_INIT(fuse_argc, fuse_argv);
 
+    pca9685_sim_init();
     vl53l0x_sim_init();
     ssd1306_sim_init();
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 from typing import Mapping
@@ -66,6 +67,51 @@ def boolean_value(data: Mapping[str, object], field: str) -> bool:
         if normalised in {"0", "false", "off"}:
             return False
     raise RequestValidationError(f"{field} must be true/false or 1/0")
+
+
+def pca9685_state(data: Mapping[str, object]) -> dict[str, object]:
+    """Validate the complete PCA9685 state published by the I2C stub."""
+    address = bounded_int(data, "address", default=0x40, minimum=0, maximum=0x7F)
+    frequency_value = data.get("frequencyHz")
+    if frequency_value is None:
+        frequency_hz = None
+    elif (
+        isinstance(frequency_value, bool)
+        or not isinstance(frequency_value, (int, float))
+        or not math.isfinite(frequency_value)
+        or not 1 <= frequency_value <= 2000
+    ):
+        raise RequestValidationError("frequencyHz must be null or between 1 and 2000")
+    else:
+        frequency_hz = float(frequency_value)
+
+    raw_channels = data.get("channels")
+    if not isinstance(raw_channels, list) or len(raw_channels) != 16:
+        raise RequestValidationError("channels must contain exactly 16 entries")
+
+    channels: list[dict[str, object]] = []
+    for index, raw_channel in enumerate(raw_channels):
+        if not isinstance(raw_channel, dict):
+            raise RequestValidationError(f"channels[{index}] must be an object")
+        channel = bounded_int(raw_channel, "channel", minimum=0, maximum=15)
+        if channel != index:
+            raise RequestValidationError(
+                f"channels[{index}].channel must equal its array index"
+            )
+        channels.append(
+            {
+                "channel": channel,
+                "on": bounded_int(raw_channel, "on", minimum=0, maximum=4095),
+                "off": bounded_int(raw_channel, "off", minimum=0, maximum=4095),
+                "fullOn": boolean_value(raw_channel, "fullOn"),
+                "fullOff": boolean_value(raw_channel, "fullOff"),
+            }
+        )
+    return {
+        "address": address,
+        "frequencyHz": frequency_hz,
+        "channels": channels,
+    }
 
 
 _RFID_UID = re.compile(r"^[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){3,9}$")
