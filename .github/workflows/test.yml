@@ -68,9 +68,7 @@ jobs:
             --workdir /workspace \
             gar-linux-device:ci \
             /usr/local/lib/gar/venv/bin/python3 \
-              targets/linux-device/runtime/web-bridge/tests/smoke_bridge.py \
-              targets/linux-device/hardware \
-              targets/luckfox-rv1106/hardware
+              targets/linux-device/runtime/web-bridge/tests/smoke_bridge.py
 
       - name: Build native Linux runtime
         run: make linux-runtime CC=gcc

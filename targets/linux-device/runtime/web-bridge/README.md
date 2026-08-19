@@ -52,14 +52,13 @@ GAR_HARDWARE_DIR=/path/to/product/hardware \
   python3 targets/linux-device/runtime/web-bridge/bridge.py
 python3 -m unittest discover \
   -s targets/linux-device/runtime/web-bridge/tests -v
-python3 targets/linux-device/runtime/web-bridge/tests/smoke_bridge.py \
-  /path/to/product/hardware
+python3 targets/linux-device/runtime/web-bridge/tests/smoke_bridge.py
 ```
 
-The last command starts an isolated live bridge for each hardware directory
-and checks HTTP state/static delivery, same-origin WebSocket access, invalid
-request and framebuffer handling, traversal rejection, Unix-socket ownership,
-and safe recovery from a stale socket.
+The last command creates isolated test-only hardware fixtures, starts a live
+bridge for each fixture, and checks HTTP state/static delivery, same-origin
+WebSocket access, invalid request and framebuffer handling, traversal rejection,
+Unix-socket ownership, and safe recovery from a stale socket.
 
 The bridge listens on `127.0.0.1:8080` by default. Set `GAR_BRIDGE_HOST` or
 `GAR_BRIDGE_PORT` when another bind address or port is required. In particular,

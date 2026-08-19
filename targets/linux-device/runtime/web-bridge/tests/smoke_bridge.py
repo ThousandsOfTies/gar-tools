@@ -7,7 +7,6 @@ aiohttp because it verifies the runtime HTTP and WebSocket integration.
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import json
 import os
@@ -24,6 +23,47 @@ from aiohttp import ClientConnectorError, ClientSession, WSServerHandshakeError
 WEB_BRIDGE_DIR = Path(__file__).resolve().parents[1]
 BRIDGE_SCRIPT = WEB_BRIDGE_DIR / "bridge.py"
 STUB_CONNECTION_LIMIT = 16
+
+SMOKE_HARDWARE_FILES = {
+    "linux-device": {
+        "gpio.csv": """name,chip,line,direction,role,active,initial,pull,sim_control,description
+power_button,/dev/gpiochip0,17,input,button,high,,pull-down,pull,test button
+status_led,/dev/gpiochip0,18,output,led,high,0,,value,test status LED
+activity_led,/dev/gpiochip0,24,output,led,high,0,,value,test activity LED
+aux_button,/dev/gpiochip0,27,input,button,high,,pull-down,pull,test auxiliary button
+""",
+        "i2c.csv": """name,bus,dev,address,driver,sim,description
+display,1,/dev/i2c-1,0x3c,ssd1306,ssd1306,test display
+range,1,/dev/i2c-1,0x29,vl53l0x,vl53l0x,test range sensor
+""",
+        "spi.csv": """name,bus,chip_select,dev,mode,max_speed_hz,driver,sim,description
+rfid,0,0,/dev/spidev0.0,0,1000000,mfrc522,mfrc522,test RFID reader
+""",
+    },
+    "luckfox-rv1106": {
+        "gpio.csv": """name,chip,line,direction,role,active,initial,pull,sim_control,description
+encoder_a,/dev/gpiochip0,20,input,encoder,high,,pull-up,,test encoder phase A
+encoder_b,/dev/gpiochip0,21,input,encoder,high,,pull-up,,test encoder phase B
+encoder_sw,/dev/gpiochip0,22,input,button,low,,pull-up,,test encoder switch
+lcd_dc,/dev/gpiochip0,23,output,display_ctrl,high,1,,,test display DC
+lcd_rst,/dev/gpiochip0,24,output,display_ctrl,high,1,,,test display reset
+""",
+        "spi.csv": """name,bus,chip_select,dev,mode,max_speed_hz,driver,sim,description
+display,0,0,/dev/spidev0.0,0,40000000,ili9341,ili9341,test display
+""",
+    },
+}
+
+
+def _write_smoke_hardware(root: Path) -> list[Path]:
+    hardware_dirs: list[Path] = []
+    for target_name, files in SMOKE_HARDWARE_FILES.items():
+        hardware_dir = root / target_name / "hardware"
+        hardware_dir.mkdir(parents=True)
+        for filename, content in files.items():
+            (hardware_dir / filename).write_text(content, encoding="utf-8")
+        hardware_dirs.append(hardware_dir)
+    return hardware_dirs
 
 
 def _free_tcp_port() -> int:
@@ -491,22 +531,10 @@ async def check_empty_hardware_directory() -> None:
                         process.wait(timeout=3)
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "hardware_dirs",
-        metavar="HARDWARE_DIR",
-        nargs="+",
-        type=Path,
-        help="target hardware directories to exercise",
-    )
-    return parser.parse_args()
-
-
 def main() -> None:
-    arguments = _parse_args()
-    for hardware_dir in arguments.hardware_dirs:
-        asyncio.run(check_hardware_directory(hardware_dir))
+    with tempfile.TemporaryDirectory(prefix="gar-smoke-hardware-") as root_name:
+        for hardware_dir in _write_smoke_hardware(Path(root_name)):
+            asyncio.run(check_hardware_directory(hardware_dir))
     asyncio.run(check_empty_hardware_directory())
 
 
