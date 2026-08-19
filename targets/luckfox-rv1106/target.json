@@ -1,7 +1,7 @@
 {
   "id": "luckfox-rv1106",
   "displayName": "Luckfox Pico (RV1106)",
-  "description": "Buildroot Linux target for Luckfox Pico Plus/Pro/Max with RKMedia camera pipeline and lightweight local UI control.",
+  "description": "Buildroot Linux target for Luckfox Pico Plus/Pro/Max with reusable camera, media, display, GPIO, and SSH device surfaces.",
   "toolsRoot": "targets/luckfox-rv1106",
   "defaultBackends": {
     "codespace": "local",
@@ -12,7 +12,7 @@
     "simulator": "EC2 Graviton is the primary simulation host, same model as linux-device target.",
     "runtime": "For EC2 simulation runtime, reuse tools under targets/linux-device/runtime.",
     "target": "Real device deploy path remains SSH over USB gadget network or LAN.",
-    "media": "SC3336 video capture and H.264 encode should use RKMedia/Rockchip MPP APIs.",
-    "ui": "ILI9341 can be driven by framebuffer (/dev/fb0) or direct SPI path depending on BSP."
+    "media": "SC3336 video capture and H.264 encode are exposed through the board's RKMedia/Rockchip MPP interfaces.",
+    "display": "Display hardware can be driven by framebuffer (/dev/fb0) or direct SPI depending on the selected BSP."
   }
 }

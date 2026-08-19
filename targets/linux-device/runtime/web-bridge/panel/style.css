@@ -215,7 +215,7 @@ body {
   height: 240px;
 }
 
-/* Rotary encoder (gar-stream-rx KY-040) */
+/* KY-040 rotary encoder */
 .rotary-counter {
   font-size: 2.4rem;
   font-weight: bold;
@@ -269,7 +269,7 @@ body {
   transform: translateY(3px);
 }
 
-/* ILI9341 (gar-stream-rx video monitor) */
+/* ILI9341 display */
 #ili9341-canvas {
   image-rendering: pixelated;
   border: 1px solid #1e1e44;

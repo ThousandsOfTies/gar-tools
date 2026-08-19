@@ -17,10 +17,18 @@ scriptではなく、`GaplessAgentRuntime`の`gar` CLIです。
 - `docs/`: simulation設定とAI agent向けの補足資料
 
 各targetの`hardware/capabilities.json`はboard/OSが提供するGPIO、SPI、video、
-networkなどの能力を宣言するTarget Pack contractです。`hardware/*.csv`は空の
-assignment templateであり、product固有の要件・部品・配線を含めません。productの
-定義は`gar hw init`でworkspaceへ展開してから編集し、実際のpin/bus割当は
-Product所有のTarget bindingとして管理します。SSH/IP等の個体差だけをmachine-local設定に残します。
+networkなどの能力を宣言するTarget Pack contractです。applicationの要件・部品・
+配線を表す`hardware/*.csv`はここには置かず、各Product workspaceが所有してGARへ
+入力します。`gar hw init`はtarget非依存の空schemaをProduct側に生成します。実際の
+pin/bus割当はProduct所有のTarget bindingとして管理し、SSH/IP等の個体差だけを
+machine-local設定に残します。
+
+Target Packに残すものは、`target.json`、board/OS capability、provisioning、
+toolchain、実機bring-up、汎用device provider/emulatorです。特定Productの画面構成、
+通信payload、認証、状態機械、シナリオ、配線、application scaffoldは各Product
+workspaceへ置き、artifact・`hardware.path`・runtime入力を通してTarget toolへ渡します。
+たとえばILI9341 providerはhardware固有なのでここに残りますが、それを使うRx画面や
+GPIO割当はProduct側が所有します。
 
 ## GARから使う
 

@@ -25,6 +25,11 @@ TARGETS = {
 
 
 class TargetCapabilityTests(unittest.TestCase):
+    def test_no_target_pack_owns_application_csv(self) -> None:
+        csv_paths = sorted(path.relative_to(ROOT) for path in (ROOT / "targets").rglob("*.csv"))
+
+        self.assertEqual([], csv_paths)
+
     def test_capability_schema_and_static_board_invariants(self) -> None:
         for target_id, expected in TARGETS.items():
             with self.subTest(target_id=target_id):

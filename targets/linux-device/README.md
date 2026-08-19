@@ -9,13 +9,15 @@ run this runtime; the runtime itself is about Linux `/dev` compatibility:
 - `runtime/gpio-stub/`: legacy CUSE GPIO spike and notes
 - `runtime/i2c-stub/`: CUSE I2C device with SSD1306 and VL53L0X simulation
 - `runtime/spi-stub/`: CUSE SPI device with MFRC-522 simulation
-- `runtime/ili9341-stub/`: CUSE SPI device with ILI9341 320x240 panel
-  simulation (gar-stream-rx video monitor); KY-040 rotary encoder support
+- `runtime/ili9341-stub/`: CUSE SPI device with reusable ILI9341 320x240 panel
+  simulation; KY-040 rotary encoder support
   lives in `web-bridge` only (gpio-sim direct, no CUSE binary needed)
 - `runtime/web-bridge/`: HTTP bridge and panel for observing and driving state
 - `runtime/test/`: small Linux test applications
-- `hardware/`: default CSV hardware definition copied by `gar hw init`
 - `Dockerfile`: local container image used by the `local_docker` simulator
+
+Application components and wiring are not part of this Target Pack. The
+selected Product workspace supplies its own `hardware/*.csv` to the runtime.
 
 GAR orchestration and EC2 provisioning live in `GaplessAgentRuntime`.
 

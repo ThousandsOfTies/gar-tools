@@ -14,7 +14,7 @@ Standard policy for this target:
 
 - Do not use `LD_PRELOAD` for normal EC2 simulation flow.
 - Prefer replacing `/dev/*` providers directly, same style as linux-device/RasPi flow.
-- Keep one application source and one device-path contract for real + sim (zero-diff target).
+- Let each Product define whether it keeps one device-path contract for real and simulation.
 - GAR primary path is system-level substitution using CUSE/gpio-sim, not HAL replacement.
 - The normal path is the GAR-generated systemd runtime. The launchers in
   `runtime/bin` are direct diagnostics for runtime development only.
@@ -80,7 +80,8 @@ the launcher with `GAR_LUCKFOX_ENABLE_I2C_SIM=1`.
 Start device-file runtime:
 
 ```bash
-targets/luckfox-rv1106/runtime/bin/gar-luckfox-ec2-devfs-start
+GAR_HARDWARE_DIR=/path/to/product/hardware \
+  targets/luckfox-rv1106/runtime/bin/gar-luckfox-ec2-devfs-start
 ```
 
 Run app without source changes:
@@ -144,10 +145,9 @@ See `docs/03_CAMERA_CUSE_ROADMAP.md` for CUSE camera milestones.
 
 ## What this validates
 
-- App startup and lifecycle behavior.
-- GPIO menu interaction and parameter state transitions.
-- I/O error handling and reconnect logic.
-- RTSP server control flow (session start/stop/status).
+- Product startup and lifecycle behavior against the target's device surfaces.
+- Generic GPIO, SPI, I2C, video, and framebuffer access paths.
+- I/O error handling and reconnect behavior implemented by the Product.
 
 ## What must stay on real Luckfox hardware
 

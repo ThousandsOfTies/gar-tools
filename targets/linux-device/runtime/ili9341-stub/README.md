@@ -1,15 +1,12 @@
-# cuse_spi_ili9341 — CUSE SPI stub (ILI9341 320×240 sim, gar-stream-rx)
+# cuse_spi_ili9341 — reusable CUSE SPI stub (ILI9341 320×240 sim)
 
-`gar-stream-rx`（Luckfox Lyra Plus 上のビデオモニター）の `ili9341.py` が使う
-`/dev/spidevX.Y` を CUSE で userspace に生やし、未改変のアプリがそのまま
-ILI9341 パネルへ描画できるようにするスタブです。`spi-stub/cuse_spi`
-（MFRC-522 sim）と同じ ioctl プラミングを再利用し、デバイス固有の状態機械
-だけを `ili9341_sim.c` に分離しています。
+Productが使う`/dev/spidevX.Y`をCUSEでuserspaceに生やし、未改変のアプリが
+そのままILI9341パネルへ描画できるようにするスタブです。
+`spi-stub/cuse_spi`（MFRC-522 sim）と同じioctlプラミングを再利用し、
+デバイス固有の状態機械だけを`ili9341_sim.c`に分離しています。
 
-同じ `/dev/spidev0.0` という慣習的なノード名を使いますが、対象アプリ
-シナリオが異なる（`spi-stub` は gar-adhoc-app の sensor_demo、
-こちらは gar-stream-rx）ため、**同時に2つを起動する想定はありません**。
-どちらか一方だけを、そのシナリオに合わせて起動してください。
+同じ`/dev/spidev0.0`という慣習的なnode名でMFRC-522 stubと同時に起動する
+想定はありません。Productの`spi.csv`が選んだproviderだけを起動してください。
 
 ## なぜ DC (data/command) の扱いが特別か
 
@@ -21,8 +18,8 @@ web bridge（`GAR_HW_SIM_SOCK` または `GAR_RUNTIME_DIR/hw_sim.sock`）に
 「DC ピンの現在値」を問い合わせ、それに応じてコマンド/データを振り分けます。
 
 DCピンのgpio-sim上のline番号は`--dc-line=N`で指定します。通常のruntime
-起動では、targetの`hardware/gpio.csv`にある`lcd_dc`のlineをlauncherと
-web bridgeが共有するため、個別指定は不要です。
+起動では、Product workspaceの`hardware/gpio.csv`にある`lcd_dc`のlineを
+launcherとweb bridgeが共有するため、個別指定は不要です。
 
 ## 対応 ioctl
 

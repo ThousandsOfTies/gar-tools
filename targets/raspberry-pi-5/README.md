@@ -9,8 +9,8 @@ CUSE、gpio-sim、simulation Web Panelは実機へdeployしません。
 `hardware/capabilities.json` is the Target Pack contract for verified GPIO,
 SPI, USB video, and network resources. It records board capabilities only;
 application requirements and physical wiring belong to the product and its
-versioned Target binding. The empty CSV templates under `hardware/` are copied
-into a product workspace by `gar hw init` before an assignment is made.
+versioned Target binding. Product-owned assignment CSVs are passed to GAR from
+the workspace's `hardware/` directory; this Target contains no CSV defaults.
 
 ## 標準フロー
 

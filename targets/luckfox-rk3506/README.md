@@ -72,7 +72,7 @@ any application payload is transferred.
 
 `hardware/capabilities.json` declares the board's available GPIO, SPI, and
 network resources. The file is target-owned and is intentionally free of
-application components or wiring. `hardware/` is only a blank workspace
-template; product requirements and physical bindings are kept outside this
-Target. This separation lets GAR reject incompatible assignments before a
-deploy without turning a board definition into an application profile.
+application components or wiring. Product CSV assignments, requirements, and
+physical bindings are kept outside this Target and supplied by the selected
+Product workspace. This separation lets GAR reject incompatible assignments
+before a deploy without turning a board definition into an application profile.

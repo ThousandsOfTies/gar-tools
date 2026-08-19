@@ -7,11 +7,11 @@ The long-term GAR direction is Renode: an AI-maintained virtual board with
 scriptable peripherals, analyzers, and CI tests. See
 [`renode/ROADMAP.md`](renode/ROADMAP.md).
 
-The practical short-term path for `firmware.bin` smoke tests is Espressif QEMU,
-plus Bluetooth Classic SPP probes for M5StickC Plus2-class real hardware.
+The practical short-term path for `firmware.bin` smoke tests is Espressif QEMU.
+Product protocol probes belong to the selected Product workspace.
 
 These are optional target tools. The default GAR setup path for ESP32/M5Stack is
-Wokwi; QEMU, Renode, fake-idf, and probes should be pulled into the workflow only
+Wokwi; QEMU, Renode, and fake-idf should be pulled into the workflow only
 when a specific verification task needs them.
 
 1. Build or collect a flash bundle:
@@ -23,9 +23,9 @@ when a specific verification task needs them.
 3. Run the image with `qemu-system-xtensa` from Espressif's QEMU fork.
 
 Renode files in `renode/` are intentionally a growing platform skeleton. The
-immediate target is M5StickC Plus2 Vibe Remote firmware. BugC2 base / actuator
-dock support is deferred and should be treated later as an I2C peripheral from
-the StickC firmware's point of view.
+immediate target is a minimal M5StickC Plus2 firmware contract. BugC2 base /
+actuator dock support is deferred and should be treated later as an I2C
+peripheral from the StickC firmware's point of view.
 
 ## Run the smallest Renode firmware smoke test
 
@@ -89,26 +89,12 @@ python "$IDF_PATH/tools/idf_tools.py" install qemu-xtensa
 . "$IDF_PATH/export.sh"
 ```
 
-## Probe Bluetooth SPP
+## Product protocol probes
 
-For M5StickC Plus2-class firmware built with `VIBE_TRANSPORT_SPP=1`, Bluetooth
-Classic SPP appears to the host OS as a serial port. GAR treats that port as a
-newline-delimited JSON transport using the same payloads as Vibe Remote's
-WebSocket channel.
-
-On Linux/WSL hosts, bind the paired device to an RFCOMM device first. The exact
-pairing flow is host-specific; after pairing, the smoke probe shape is:
-
-```bash
-targets/esp32/probes/spp-jsonl/bin/gar-spp-jsonl-probe \
-  /dev/rfcomm0 \
-  --token YOUR_TOKEN \
-  --status running
-```
-
-The probe sends `hello`, optional `agentStatus`, and `ping`, then prints inbound
-JSON lines such as `ack` and `state`. It is intentionally a protocol/transport
-smoke test: it does not emulate Bluetooth radio behavior or boot firmware.
+Bluetooth SPP, WebSocket payloads, authentication tokens, and message types are
+Product contracts rather than ESP32 capabilities. Keep those probes in the
+selected Product workspace. This Target Pack only provides firmware execution,
+flashing, and reusable board simulation tools.
 
 ## Runtime layers
 
@@ -116,7 +102,6 @@ smoke test: it does not emulate Bluetooth radio behavior or boot firmware.
 |---|---|---|
 | Protocol-level virtual device | selected product workspace | Fast protocol test double; does not boot firmware |
 | Fake ESP-IDF / FreeRTOS link stubs | `targets/esp32/fake-idf/` | Minimal host-side headers and static library for apps to link before real simulation exists |
-| Bluetooth SPP probe | `targets/esp32/probes/spp-jsonl/bin/gar-spp-jsonl-probe` | Real StickC Plus2-class device smoke test over OS serial/RFCOMM |
 | QEMU firmware runner | `targets/esp32/qemu/bin/` | Short-term ESP32 boot smoke test for built artifacts |
 | Wokwi backend assets | `targets/esp32/wokwi/` | Runnable workspace template, wiring, and M5Unified compatibility shim |
 | M5Status Tiny Renode smoke | `targets/esp32/renode/m5status-tiny/` | First headless Renode firmware execution + UART Robot test |
@@ -124,6 +109,5 @@ smoke test: it does not emulate Bluetooth radio behavior or boot firmware.
 
 ## Scope
 
-This runner targets firmware-level execution. It is different from the Vibe
-Remote virtual device, which simulates the protocol/device boundary without
-booting the ESP32 binary.
+This runner targets firmware-level execution. Product-owned virtual devices
+may instead simulate a protocol/device boundary without booting an ESP32 binary.

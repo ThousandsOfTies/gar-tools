@@ -1,2 +1,0 @@
-name,bus,dev,address,driver,sim,description
-camera_ctrl,3,/dev/i2c-3,0x30,sc3336,,SC3336 control bus (address depends on board wiring)

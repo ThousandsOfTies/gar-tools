@@ -97,7 +97,7 @@ M2a, a headless Renode/Xtensa firmware smoke target, is done under
 hello-world ELF and verifies UART output with Robot Framework. This proves the
 GAR/Renode firmware-test loop, but it is not ESP32 LX6 boot yet.
 
-Do not start with the full Vibe Remote firmware. Start with the smallest
+Do not start with a full Product firmware. Start with the smallest
 firmware that proves the CPU/boot path.
 
 Candidate firmware:
@@ -140,7 +140,7 @@ Done when:
 
 ### M4: M5StickC Plus2 board surface
 
-Add the hardware surface used by the Vibe Remote client.
+Add a reusable M5StickC Plus2 hardware surface selected by Product requirements.
 
 Initial scope:
 
@@ -156,7 +156,7 @@ Done when:
 - A test can press A/B/C from Renode or Robot Framework.
 - Display activity is observable without a human screen.
 
-### M5: Vibe Remote boundary
+### M5: Product protocol boundary
 
 Decide how the host/device boundary should work.
 
@@ -165,13 +165,13 @@ Options:
 - Model enough ESP32 networking to let the firmware use Wi-Fi/WebSocket.
 - Model or bridge Bluetooth Classic SPP as a serial JSON Lines transport.
 - Provide a Renode external peripheral or host bridge that maps firmware I/O to
-  the Vibe Remote protocol.
+  a Product-supplied protocol adapter.
 - Build a test firmware mode that keeps the production state machine but uses a
   simpler host transport.
 
 Done when:
 
-- GAR can drive a firmware-level Vibe Remote session without a physical M5Stack.
+- GAR can drive a firmware-level Product session without a physical M5Stack.
 - The protocol-level virtual device remains as a fast fallback.
 
 ### M6: GAR integration
@@ -198,7 +198,7 @@ Done when:
 - Keep each missing peripheral documented as a small, testable gap.
 - Prefer stubs for firmware-unblocking reads before full hardware fidelity.
 - Add Robot tests as soon as Renode can expose a signal or UART line.
-- Keep the protocol-level Vibe Remote virtual device alive as the fast test
+- Keep the Product-owned protocol-level virtual device alive as the fast test
   double.
 - Use QEMU output to distinguish firmware bugs from Renode platform gaps.
 
@@ -207,6 +207,6 @@ Done when:
 - Can current Renode execute enough Xtensa/ESP32 code to reach user firmware?
 - Is a boot-ROM bypass practical for our Arduino/PlatformIO output?
 - What is the smallest M5StickC Plus2-compatible board surface needed before
-  the Vibe Remote firmware reaches useful user code?
+  a selected Product firmware reaches useful user code?
 - Should Wi-Fi/Bluetooth be modeled below the socket/radio APIs, or should GAR
   provide a host bridge at a higher boundary such as WebSocket or SPP serial?

@@ -96,21 +96,11 @@ class LuckfoxLyraTargetTests(unittest.TestCase):
         self.assertNotIn("systemctl", prepare + installer + launcher + lifecycle)
         self.assertNotIn("sudo", prepare + installer + launcher + lifecycle)
 
-    def test_hardware_template_has_headers_only(self) -> None:
+    def test_target_pack_has_capabilities_but_no_application_csv(self) -> None:
         hardware = TARGET / "hardware"
 
-        self.assertEqual(
-            "name,chip,line,direction,role,active,initial,pull,sim_control,description\n",
-            (hardware / "gpio.csv").read_text(encoding="utf-8"),
-        )
-        self.assertEqual(
-            "name,bus,chip_select,dev,mode,max_speed_hz,driver,sim,description\n",
-            (hardware / "spi.csv").read_text(encoding="utf-8"),
-        )
-        self.assertEqual(
-            "source,source_pin,target,target_pin,signal,description\n",
-            (hardware / "connections.csv").read_text(encoding="utf-8"),
-        )
+        self.assertTrue((hardware / "capabilities.json").is_file())
+        self.assertEqual([], list(hardware.glob("*.csv")))
 
 
 if __name__ == "__main__":

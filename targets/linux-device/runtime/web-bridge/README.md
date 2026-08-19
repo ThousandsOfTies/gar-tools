@@ -36,9 +36,9 @@ The `sim` column in `i2c.csv` and `spi.csv` decides which device sections the
 panel displays. An empty `sim` value means that GAR does not emulate that real
 device. Older CSVs without a `sim` column fall back to `driver`.
 
-When `GAR_HARDWARE_DIR` is unset, the bridge retains the original linux-device
-demo mapping (buttons 17/27, LEDs 18/24, rotary 5/6/13, and display DC 16).
-When a directory is explicitly configured, a missing or headers-only
+When `GAR_HARDWARE_DIR` is unset, the bridge starts without GPIO or simulated
+devices; it never invents an application profile from the selected target.
+When a Product directory is explicitly configured, a missing or headers-only
 `gpio.csv` means that no GPIO is configured; simulated devices from `i2c.csv`
 and `spi.csv` are still loaded. A missing directory or malformed existing CSV
 is an error rather than a reason to silently use unrelated line numbers.
@@ -48,13 +48,12 @@ is an error rather than a reason to silently use unrelated line numbers.
 ```bash
 python3 -m pip install \
   -r targets/linux-device/runtime/web-bridge/requirements.txt
-GAR_HARDWARE_DIR=targets/linux-device/hardware \
+GAR_HARDWARE_DIR=/path/to/product/hardware \
   python3 targets/linux-device/runtime/web-bridge/bridge.py
 python3 -m unittest discover \
   -s targets/linux-device/runtime/web-bridge/tests -v
 python3 targets/linux-device/runtime/web-bridge/tests/smoke_bridge.py \
-  targets/linux-device/hardware \
-  targets/luckfox-rv1106/hardware
+  /path/to/product/hardware
 ```
 
 The last command starts an isolated live bridge for each hardware directory

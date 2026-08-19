@@ -1,9 +1,9 @@
 /*
- * cuse_spi_ili9341.c — CUSE-based SPI stub for the ILI9341 panel (gar-stream-rx)
+ * cuse_spi_ili9341.c — reusable CUSE-based SPI stub for the ILI9341 panel
  *
  * Creates /dev/spidev0.0 (or the name given by --devname) as a userspace
  * character device and serves the spidev ioctl interface used by
- * gar-stream-rx's ili9341.py:
+ * Product ILI9341 drivers can use:
  *
  *   SPI_IOC_RD/WR_MODE          – SPI mode (CPOL/CPHA)            (accepted)
  *   SPI_IOC_RD/WR_LSB_FIRST     – bit order                        (accepted)

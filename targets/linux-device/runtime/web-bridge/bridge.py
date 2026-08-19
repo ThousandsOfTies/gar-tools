@@ -65,7 +65,7 @@ ALLOWED_HTTP_HOSTS = _allowed_http_hosts()
 
 MAX_BROWSER_MESSAGE_BYTES = 64 * 1024
 # A 2048x1536 JPEG from a real UVC camera can exceed 2 MiB for detailed scenes.
-# Keep a finite per-frame limit, while allowing the native 3 MP GarStream camera
+# Keep a finite per-frame limit, while allowing a native 3 MP camera
 # mode to reach the simulator without an artificial downscale.
 MAX_CAMERA_FRAME_BYTES = 8 * 1024 * 1024
 MAX_STUB_LINE_BYTES = 2 * 1024 * 1024
