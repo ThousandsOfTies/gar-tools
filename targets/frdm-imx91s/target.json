@@ -1,0 +1,33 @@
+{
+  "id": "frdm-imx91s",
+  "displayName": "NXP FRDM-IMX91S",
+  "description": "NXP FRDM-IMX91S Linux image target flashed from a Linux host with NXP UUU and verified over the board's USB-C debug UART.",
+  "toolsRoot": "targets/frdm-imx91s",
+  "compatibility": {
+    "architecture": "aarch64",
+    "abi": "gnu",
+    "libc": "glibc",
+    "toolchainTriple": "aarch64-linux-gnu"
+  },
+  "defaultBackends": {
+    "codespace": "local",
+    "simulator": "ssh_remote",
+    "target": "uuu"
+  },
+  "backendNotes": {
+    "target": "The selected UUU command flashes the full Product Linux image. Set workspace.target.serial to the first CH343 USB-UART device when serialVerify is enabled.",
+    "download": "Put SW1 into Serial Downloader mode and connect the board USB OTG/download port. The USB-C debug UART is a separate console connection."
+  },
+  "provisioning": {
+    "uuu": {
+      "type": "uuu",
+      "command": ["uuu", "-b", "sd_all", "{image}"],
+      "imageSection": "image",
+      "serialVerify": {
+        "pattern": "login:",
+        "baud": 115200,
+        "timeoutSeconds": 45
+      }
+    }
+  }
+}
