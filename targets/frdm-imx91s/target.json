@@ -1,7 +1,7 @@
 {
   "id": "frdm-imx91s",
   "displayName": "NXP FRDM-IMX91S",
-  "description": "NXP FRDM-IMX91S Linux image target flashed from a Linux host with NXP UUU and verified over the board's USB-C debug UART.",
+  "description": "NXP FRDM-IMX91S target provisioned from a product-owned UUU script and component artifacts, then verified over the board's USB-C debug UART.",
   "toolsRoot": "targets/frdm-imx91s",
   "compatibility": {
     "architecture": "aarch64",
@@ -15,13 +15,13 @@
     "target": "uuu"
   },
   "backendNotes": {
-    "target": "The selected UUU command flashes the full Product Linux image. Set workspace.target.serial to the first CH343 USB-UART device when serialVerify is enabled.",
+    "target": "The selected UUU command executes the Product-owned .lst script. deploy.image contains exactly one script; its relative pub/ files are supplied as deploy.uuu component artifacts. Set workspace.target.serial to the first CH343 USB-UART device when serialVerify is enabled.",
     "download": "Put SW1 into Serial Downloader mode and connect the board USB OTG/download port. The USB-C debug UART is a separate console connection."
   },
   "provisioning": {
     "uuu": {
       "type": "uuu",
-      "command": ["uuu", "-b", "sd_all", "{image}"],
+      "command": ["uuu", "{image}"],
       "imageSection": "image",
       "serialVerify": {
         "pattern": "login:",

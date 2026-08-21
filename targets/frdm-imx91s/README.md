@@ -1,15 +1,34 @@
 # FRDM-IMX91S UUU Target
 
-This Target Pack uses a full Linux image as the deploy artifact. The default
-command is equivalent to:
+This Target Pack follows the factory-provisioning pattern used by the existing
+NXP product: UUU executes a product-owned `.lst` script and the script refers
+to bootloader, initramfs, rootfs, and persistent-storage artifacts in the same
+bundle. The default command is equivalent to:
 
 ```bash
-uuu -b sd_all <image.wic.zst>
+uuu <Factory-uuu-gar-servo-pet.lst>
 ```
 
-For eMMC or NAND, change `provisioning.uuu.command` in `target.json` to the
-UUU mode and arguments required by the Product image. The command is an argv
+The artifact bundle is laid out so relative paths in the script remain valid:
+
+```text
+Factory-uuu-gar-servo-pet.lst       # deploy.image: exactly one file
+pub/
+  u-boot/flash_gar_servo_pet.bin
+  rootfs/rootfs.squashfs
+  rootfs/usr.local.tar.bz2
+  mfgtools/fsl-image-mfgtool-initramfs-imx_mfgtools.cpio.zst
+```
+
+The supporting files are declared under `deploy.uuu`. GAR runs UUU with the
+script's parent directory as its working directory, so `pub/...` references
+inside the script resolve without a shell wrapper. The command is an argv
 array; GAR never evaluates it through a shell.
+
+The `.lst` file owns the board-specific SDP/FBK sequence, partition layout,
+SquashFS/overlay setup, and any factory updater initialization. Do not reuse a
+script from another i.MX board until its `flash_*` binary and eMMC partition
+layout have been verified.
 
 ## Connections
 
@@ -31,5 +50,7 @@ enabled:
 }
 ```
 
-The Product artifact must contain exactly one image in `deploy.image.files`.
-The `src` is passed to the configured UUU command as `{image}`.
+The Product artifact must contain exactly one UUU script in
+`deploy.image.files`. Its `src` is passed to the configured UUU command as
+`{image}`. All files referenced by that script must also be present in the
+artifact bundle (normally via `deploy.uuu.files`).
