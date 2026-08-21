@@ -15,15 +15,23 @@ The artifact bundle is laid out so relative paths in the script remain valid:
 Factory-uuu-gar-servo-pet.lst       # deploy.image: exactly one file
 pub/
   u-boot/flash_gar_servo_pet.bin
+  kernel/Image
+  kernel/imx91-11x11-frdm-imx91s.dtb
+  kernel/extlinux.conf
   rootfs/rootfs.squashfs
   rootfs/usr.local.tar.bz2
   mfgtools/fsl-image-mfgtool-initramfs-imx_mfgtools.cpio.zst
+  layout/gar-servo-pet.sfdisk
 ```
 
-The supporting files are declared under `deploy.uuu`. GAR runs UUU with the
-script's parent directory as its working directory, so `pub/...` references
-inside the script resolve without a shell wrapper. The command is an argv
-array; GAR never evaluates it through a shell.
+The supporting files are declared under `deploy.uuu`. The kernel and DTB are
+needed because the current UUU syntax boots the manufacturing initramfs with
+`FB: download`/`FB: acmd booti` before switching to the Linux `FBK` protocol.
+The partition layout is an explicit Product input; it must be checked against
+the actual eMMC before enabling a write. GAR runs UUU with the script's parent
+directory as its working directory, so `pub/...` references inside the script
+resolve without a shell wrapper. The command is an argv array; GAR never
+evaluates it through a shell.
 
 The `.lst` file owns the board-specific SDP/FBK sequence, partition layout,
 SquashFS/overlay setup, and any factory updater initialization. Do not reuse a
