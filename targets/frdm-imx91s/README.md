@@ -33,6 +33,21 @@ directory as its working directory, so `pub/...` references inside the script
 resolve without a shell wrapper. The command is an argv array; GAR never
 evaluates it through a shell.
 
+Before confirming the layout, generate the read-only probe from the Product
+repository and run it with the board in Serial Downloader mode:
+
+```bash
+GarServoPet/scripts/generate-imx91s-layout-probe.sh --validate
+cd GarServoPet/artifacts/from-codespace
+/home/user/.local/bin/uuu Inspect-imx91s-layout.lst
+```
+
+The probe only boots the kernel/initramfs into RAM and prints `/proc/partitions`,
+the available `mmcblk` devices, capacities, and `sfdisk --dump` output. It does
+not partition, format, mount, or write eMMC. Use that output to update the
+Product layout file and set `GAR_IMX91S_LAYOUT_CONFIRMED=1` only after the
+device number and partition starts/sizes match the board.
+
 The `.lst` file owns the board-specific SDP/FBK sequence, partition layout,
 SquashFS/overlay setup, and any factory updater initialization. Do not reuse a
 script from another i.MX board until its `flash_*` binary and eMMC partition
