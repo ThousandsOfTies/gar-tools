@@ -59,8 +59,10 @@ The download connection and the debug console are separate:
 
 - Put the board into Serial Downloader mode and connect its USB OTG/download
   port for UUU.
-- Connect the USB-C debug UART (`J11`) for boot verification. The first CH343
-  serial device is the Cortex-A console at 115200 8N1.
+- Connect the USB-C debug UART (`J11`) for boot verification. The first
+  CH342/CH343 serial interface is the Cortex-A console at 115200 8N1. With
+  the observed CH342 adapter under WSL2, this is usually `/dev/ttyACM0`
+  (Windows COM5); the second interface is `/dev/ttyACM1` (Windows COM4).
 
 Set the workspace target serial device before deploying when `serialVerify` is
 enabled:
@@ -68,7 +70,7 @@ enabled:
 ```json
 {
   "target": {
-    "serial": "/dev/ttyCH343USB0"
+    "serial": "/dev/ttyACM0"
   }
 }
 ```
