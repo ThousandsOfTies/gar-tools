@@ -14,6 +14,7 @@ The artifact bundle is laid out so relative paths in the script remain valid:
 ```text
 Factory-uuu-gar-servo-pet.lst       # deploy.image: exactly one file
 pub/
+  u-boot/flash_gar_servo_pet.bin
   u-boot/flash_gar_servo_pet_spinand.bin
   kernel/Image
   kernel/imx91-11x11-frdm-imx91s.dtb
@@ -27,12 +28,13 @@ pub/
 ```
 
 The supporting files are declared under `deploy.uuu`. The kernel and DTB are
-needed because UUU first boots U-Boot and the manufacturing initramfs before
-switching to the Linux `FBK` protocol. The script writes the onboard SPI-NAND
-using the fixed MTD layout in the FRDM-IMX91S DTS. GAR runs UUU with the
-script's parent directory as its working directory, so `pub/...` references
-inside the script resolve without a shell wrapper. The command is an argv
-array; GAR never evaluates it through a shell.
+needed because UUU first RAM-boots the SD/manufacturing U-Boot and the
+manufacturing initramfs before switching to the Linux `FBK` protocol. The
+separate SPI-NAND image is passed to `fspinand` for persistent installation.
+The script uses the fixed MTD layout in the FRDM-IMX91S DTS. GAR runs UUU with
+the script's parent directory as its working directory, so `pub/...`
+references resolve without a shell wrapper. GAR never evaluates the command
+through a shell.
 
 Before confirming the layout, power the board off and set the official
 FRDM-IMX91S boot switch to Serial Downloader: `SW1[4-1] = 0001`, i.e.
