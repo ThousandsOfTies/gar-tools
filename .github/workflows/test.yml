@@ -20,6 +20,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ThousandsOfTies/GaplessAgentRuntime
+          # Keep the contract validator aligned with the UUU backend used by
+          # targets/frdm-imx91s/target.json.
+          ref: f5dca75a82f1d3dc5accc9130cc41d8175d4ff7a
           path: GaplessAgentRuntime
 
       - name: Install native and ARM64 build dependencies
