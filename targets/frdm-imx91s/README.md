@@ -33,8 +33,12 @@ directory as its working directory, so `pub/...` references inside the script
 resolve without a shell wrapper. The command is an argv array; GAR never
 evaluates it through a shell.
 
-Before confirming the layout, generate the read-only probe from the Product
-repository and run it with the board in Serial Downloader mode:
+Before confirming the layout, power the board off and set the official
+FRDM-IMX91S boot switch to Serial Downloader: `SW1[4-1] = 0001`, i.e.
+`SW1-4=OFF`, `SW1-3=OFF`, `SW1-2=OFF`, `SW1-1=ON` (NXP's table defines
+`1=ON`, `0=OFF`). Connect the UUU cable to USB1 (`J5`), not the debug UART
+(`J11`), then power the board on. Generate the read-only probe from the
+Product repository and run it:
 
 ```bash
 GarServoPet/scripts/generate-imx91s-layout-probe.sh --validate

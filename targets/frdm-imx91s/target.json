@@ -16,7 +16,7 @@
   },
   "backendNotes": {
     "target": "The selected UUU command executes the Product-owned .lst script. deploy.image contains exactly one script; its relative pub/ files are supplied as deploy.uuu component artifacts. Set workspace.target.serial to the first CH342/CH343 USB-UART device (usually /dev/ttyACM0 under WSL2) when serialVerify is enabled.",
-    "download": "Put SW1 into Serial Downloader mode and connect the board USB OTG/download port. The USB-C debug UART is a separate console connection."
+    "download": "Power off first, set SW1[4-1]=0001 (SW1-4..1 = OFF/OFF/OFF/ON), connect USB1 (J5) to the host for UUU, and keep the USB-C debug UART J11 as a separate console connection."
   },
   "provisioning": {
     "uuu": {
