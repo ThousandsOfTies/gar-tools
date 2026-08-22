@@ -14,24 +14,25 @@ The artifact bundle is laid out so relative paths in the script remain valid:
 ```text
 Factory-uuu-gar-servo-pet.lst       # deploy.image: exactly one file
 pub/
-  u-boot/flash_gar_servo_pet.bin
+  u-boot/flash_gar_servo_pet_spinand.bin
   kernel/Image
   kernel/imx91-11x11-frdm-imx91s.dtb
-  kernel/extlinux.conf
+  uuu-ram/flash_gar_servo_pet_spinand.bin.padded
+  uuu-ram/Image.padded
+  uuu-ram/imx91-11x11-frdm-imx91s.dtb.padded
+  uuu-ram/fsl-image-mfgtool-initramfs-imx_mfgtools.cpio.zst.padded
   rootfs/rootfs.squashfs
   rootfs/usr.local.tar.bz2
   mfgtools/fsl-image-mfgtool-initramfs-imx_mfgtools.cpio.zst
-  layout/gar-servo-pet.sfdisk
 ```
 
 The supporting files are declared under `deploy.uuu`. The kernel and DTB are
-needed because the current UUU syntax boots the manufacturing initramfs with
-`FB: download`/`FB: acmd booti` before switching to the Linux `FBK` protocol.
-The partition layout is an explicit Product input; it must be checked against
-the actual eMMC before enabling a write. GAR runs UUU with the script's parent
-directory as its working directory, so `pub/...` references inside the script
-resolve without a shell wrapper. The command is an argv array; GAR never
-evaluates it through a shell.
+needed because UUU first boots U-Boot and the manufacturing initramfs before
+switching to the Linux `FBK` protocol. The script writes the onboard SPI-NAND
+using the fixed MTD layout in the FRDM-IMX91S DTS. GAR runs UUU with the
+script's parent directory as its working directory, so `pub/...` references
+inside the script resolve without a shell wrapper. The command is an argv
+array; GAR never evaluates it through a shell.
 
 Before confirming the layout, power the board off and set the official
 FRDM-IMX91S boot switch to Serial Downloader: `SW1[4-1] = 0001`, i.e.
@@ -46,16 +47,15 @@ cd GarServoPet/artifacts/from-codespace
 /home/user/.local/bin/uuu Inspect-imx91s-layout.lst
 ```
 
-The probe only boots the kernel/initramfs into RAM and prints `/proc/partitions`,
-the available `mmcblk` devices, capacities, and `sfdisk --dump` output. It does
-not partition, format, mount, or write eMMC. Use that output to update the
-Product layout file and set `GAR_IMX91S_LAYOUT_CONFIRMED=1` only after the
-device number and partition starts/sizes match the board.
+The probe only boots the kernel/initramfs into RAM and prints `/proc/mtd`, MTD
+names, sizes, erase/write geometry, and UBI state. It does not erase, format,
+mount, or write NAND. Set `GAR_IMX91S_NAND_LAYOUT_CONFIRMED=1` only after mtd0
+through mtd4 match `bootloader`, `config`, `kernel`, `dtb`, and `rootfs`.
 
-The `.lst` file owns the board-specific SDP/FBK sequence, partition layout,
-SquashFS/overlay setup, and any factory updater initialization. Do not reuse a
-script from another i.MX board until its `flash_*` binary and eMMC partition
-layout have been verified.
+The `.lst` file owns the board-specific SDP/FBK sequence, SPI-NAND firmware
+installation, raw MTD writes, and UBIFS root creation. Do not reuse a script
+from another i.MX board until its NAND-capable `flash_*` binary and MTD layout
+have been verified.
 
 ## Connections
 
