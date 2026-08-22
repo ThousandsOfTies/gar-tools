@@ -1,109 +1,123 @@
-# FRDM-IMX91S UUU Target
+# FRDM-IMX91S Target Pack
 
-This Target Pack follows the factory-provisioning pattern used by the existing
-NXP product: UUU executes a product-owned `.lst` script and the script refers
-to bootloader, initramfs, rootfs, and persistent-storage artifacts in the same
-bundle. The default command is equivalent to:
+This Target Pack captures the reusable factory-provisioning path for the NXP
+FRDM-IMX91S onboard 256 MiB SPI-NAND. It connects GAR's `uuu` backend to a
+Product-owned artifact bundle and supplies the generators, safety gates, and
+bring-up knowledge needed to create that bundle.
 
-```bash
-uuu <Factory-uuu-gar-servo-pet.lst>
-```
+The implementation was validated with UUU 1.5.243, the NXP Linux 6.6
+Scarthgap manufacturing image, and the public FRDM-IMX91S device tree. A new
+board revision or BSP release must pass the read-only layout probe before NAND
+writes are enabled.
 
-The artifact bundle is laid out so relative paths in the script remain valid:
+## What this pack owns
 
 ```text
-Factory-uuu-gar-servo-pet.lst       # deploy.image: exactly one file
+frdm-imx91s/
+├── target.json
+├── README.md
+├── provisioning/uuu/
+│   ├── factory-spinand.lst.in
+│   ├── generate.sh
+│   ├── generate-layout-probe.sh
+│   ├── stage.sh
+│   └── imx91s-uuu.env.example
+└── docs/
+    ├── bsp-components.md
+    ├── factory-flow.md
+    ├── troubleshooting.md
+    └── wsl2-usb.md
+```
+
+The Target Pack owns the board protocol, transfer workarounds, SPI-NAND
+procedure, MTD/UBI safety checks, and host connection guidance. A Product owns
+its boot-image filenames, root filesystem and overlay, confirmed layout
+configuration, artifact manifest, and application.
+
+## Artifact contract
+
+The Product supplies this component tree. Boot-image filenames and the DTB are
+selected in its copied `imx91s-uuu.env`.
+
+```text
 pub/
-  u-boot/flash_gar_servo_pet.bin
-  u-boot/flash_gar_servo_pet_spinand.bin
+  u-boot/<RAM_BOOT_IMAGE>
+  u-boot/<NAND_BOOT_IMAGE>
   kernel/Image
-  kernel/imx91-11x11-frdm-imx91s.dtb
-  uuu-ram/flash_gar_servo_pet_spinand.bin.padded
-  uuu-ram/Image.padded
-  uuu-ram/imx91-11x11-frdm-imx91s.dtb.padded
-  uuu-ram/fsl-image-mfgtool-initramfs-imx_mfgtools.cpio.zst.padded
+  kernel/<DTB>
   rootfs/rootfs.squashfs
   rootfs/usr.local.tar.bz2
   mfgtools/fsl-image-mfgtool-initramfs-imx_mfgtools.cpio.zst
 ```
 
-The supporting files are declared under `deploy.uuu`. The kernel and DTB are
-needed because UUU first RAM-boots the SD/manufacturing U-Boot and the
-manufacturing initramfs before switching to the Linux `FBK` protocol. The
-separate SPI-NAND image is passed to `fspinand` for persistent installation.
-The script uses the fixed MTD layout in the FRDM-IMX91S DTS. GAR runs UUU with
-the script's parent directory as its working directory, so `pub/...`
-references resolve without a shell wrapper. GAR never evaluates the command
-through a shell.
+The generators add zero-padded transfer copies under `pub/uuu-ram/`. The
+staged bundle also contains one generated `.lst`, `checksums.sha256`, and
+`bundle-info.txt`. GAR passes that `.lst` to `uuu` with the bundle directory as
+the working directory.
 
-Before confirming the layout, power the board off and set the official
-FRDM-IMX91S boot switch to Serial Downloader: `SW1[4-1] = 0001`, i.e.
-`SW1-4=OFF`, `SW1-3=OFF`, `SW1-2=OFF`, `SW1-1=ON` (NXP's table defines
-`1=ON`, `0=OFF`). Connect the UUU cable to USB1 (`J5`), not the debug UART
-(`J11`), then power the board on. Generate the read-only probe from the
-Product repository and run it:
+## Safe first use
+
+Copy the example configuration into the Product repository, set its artifact
+filenames, and leave the write gate disabled:
 
 ```bash
-GarServoPet/scripts/generate-imx91s-layout-probe.sh --validate
-cd GarServoPet/artifacts/from-codespace
-/home/user/.local/bin/uuu Inspect-imx91s-layout.lst
+cp targets/frdm-imx91s/provisioning/uuu/imx91s-uuu.env.example \
+  /path/to/product/config/imx91s-uuu.env
 ```
 
-The probe only boots the kernel/initramfs into RAM and prints `/proc/mtd`, MTD
-names, sizes, erase/write geometry, and UBI state. It does not erase, format,
-mount, or write NAND. Set `GAR_IMX91S_NAND_LAYOUT_CONFIRMED=1` only after mtd0
-through mtd4 match `bootloader`, `config`, `kernel`, `dtb`, and `rootfs`.
-
-The `.lst` file owns the board-specific SDP/FBK sequence, SPI-NAND firmware
-installation, raw MTD writes, and UBIFS root creation. Do not reuse a script
-from another i.MX board until its NAND-capable `flash_*` binary and MTD layout
-have been verified.
-
-## Connections
-
-The download connection and the debug console are separate:
-
-- Put the board into Serial Downloader mode and connect its USB OTG/download
-  port for UUU.
-- Connect the USB-C debug UART (`J11`) for boot verification. The first
-  CH342/CH343 serial interface is the Cortex-A console at 115200 8N1. With
-  the observed CH342 adapter under WSL2, this is usually `/dev/ttyACM0`
-  (Windows COM5); the second interface is `/dev/ttyACM1` (Windows COM4).
-
-Set the workspace target serial device before deploying when `serialVerify` is
-enabled:
-
-```json
-{
-  "target": {
-    "serial": "/dev/ttyACM0"
-  }
-}
-```
-
-## WSL2 USB pass-through
-
-When GAR runs inside WSL2, a USB device attached to Windows is not visible in
-WSL automatically and does not need to be mounted as a filesystem. Install
-`usbipd-win`, then use an elevated Windows PowerShell to share and attach the
-UUU port:
-
-```powershell
-usbipd list
-usbipd bind --busid <UUU_BUSID>
-usbipd attach --wsl --busid <UUU_BUSID>
-```
-
-The UUU port should appear in the Windows list as NXP `VID:PID 1fc9:0159`
-(MX91 SDPS). The CH342/CH343 entry labelled `COMx` is the separate debug UART;
-attach that bus ID as well only when console access is needed. In WSL, verify
-the UUU device before running the probe or factory script:
+Put the board in Serial Downloader mode, attach USB1, and generate the
+read-only probe:
 
 ```bash
-/home/user/.local/bin/uuu -lsusb
+targets/frdm-imx91s/provisioning/uuu/generate-layout-probe.sh \
+  --config /path/to/product/config/imx91s-uuu.env \
+  --bundle-dir /path/to/components \
+  --output /path/to/components/Inspect-imx91s-layout.lst \
+  --validate
+
+cd /path/to/components
+uuu Inspect-imx91s-layout.lst
 ```
 
-The Product artifact must contain exactly one UUU script in
-`deploy.image.files`. Its `src` is passed to the configured UUU command as
-`{image}`. All files referenced by that script must also be present in the
-artifact bundle (normally via `deploy.uuu.files`).
+Confirm that the live MTD table is exactly:
+
+| MTD | Name | Size |
+|---|---|---:|
+| 0 | `bootloader` | 8 MiB |
+| 1 | `config` | 8 MiB |
+| 2 | `kernel` | 36 MiB |
+| 3 | `dtb` | 128 KiB |
+| 4 | `rootfs` | 203.875 MiB (remaining NAND) |
+
+Only then set `GAR_IMX91S_NAND_LAYOUT_CONFIRMED=1` and stage the factory
+bundle:
+
+```bash
+targets/frdm-imx91s/provisioning/uuu/stage.sh \
+  --input-dir /path/to/components \
+  --output-dir /path/to/factory-bundle \
+  --config /path/to/product/config/imx91s-uuu.env \
+  --validate --force
+```
+
+Run the generated factory script from its bundle directory. A successful run
+ends with `GAR_IMX91S_NAND_FLASH_COMPLETE`; it deliberately does not reboot,
+because forced USB disconnects are otherwise reported by libusb as failures.
+
+## Board connections
+
+- Serial Downloader: `SW1[4-1] = 0001`, meaning
+  `SW1-4=OFF`, `SW1-3=OFF`, `SW1-2=OFF`, `SW1-1=ON`.
+- UUU data: USB1 (`J5`).
+- Cortex-A debug console: USB-C debug UART (`J11`), 115200 8N1.
+- The first CH342/CH343 serial channel is normally the Cortex-A console.
+
+The UUU and debug UART connections are separate USB devices. See
+[`docs/wsl2-usb.md`](docs/wsl2-usb.md) when GAR runs under WSL2.
+
+## Further reading
+
+- [`docs/factory-flow.md`](docs/factory-flow.md): protocol stages and safety design
+- [`docs/bsp-components.md`](docs/bsp-components.md): required NXP build outputs
+- [`docs/troubleshooting.md`](docs/troubleshooting.md): observed failures and fixes
+- [`docs/wsl2-usb.md`](docs/wsl2-usb.md): Windows/WSL USB ownership and re-enumeration
