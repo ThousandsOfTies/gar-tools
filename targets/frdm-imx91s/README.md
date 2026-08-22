@@ -73,6 +73,28 @@ enabled:
 }
 ```
 
+## WSL2 USB pass-through
+
+When GAR runs inside WSL2, a USB device attached to Windows is not visible in
+WSL automatically and does not need to be mounted as a filesystem. Install
+`usbipd-win`, then use an elevated Windows PowerShell to share and attach the
+UUU port:
+
+```powershell
+usbipd list
+usbipd bind --busid <UUU_BUSID>
+usbipd attach --wsl --busid <UUU_BUSID>
+```
+
+The UUU port should appear in the Windows list as NXP `VID:PID 1fc9:0159`
+(MX91 SDPS). The CH342/CH343 entry labelled `COMx` is the separate debug UART;
+attach that bus ID as well only when console access is needed. In WSL, verify
+the UUU device before running the probe or factory script:
+
+```bash
+/home/user/.local/bin/uuu -lsusb
+```
+
 The Product artifact must contain exactly one UUU script in
 `deploy.image.files`. Its `src` is passed to the configured UUU command as
 `{image}`. All files referenced by that script must also be present in the
