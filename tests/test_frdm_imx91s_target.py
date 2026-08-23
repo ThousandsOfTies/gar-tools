@@ -141,6 +141,57 @@ class FrdmImx91sTargetTests(unittest.TestCase):
             self.assertNotIn("ubiformat", generated)
             self.assertNotIn("acmd reboot", generated)
 
+    def test_dtb_update_touches_only_the_confirmed_dtb_partition(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = self.make_components(root / "components")
+            config = self.write_config(root, confirmed=True)
+            output = root / "Update-dtb.lst"
+
+            result = self.run_script(
+                "generate-dtb-update.sh",
+                "--config",
+                config,
+                "--bundle-dir",
+                bundle,
+                "--output",
+                output,
+            )
+
+            self.assertEqual(0, result.returncode, result.stderr)
+            generated = output.read_text(encoding="utf-8")
+            self.assertIn("/sys/class/mtd/mtd3/name", generated)
+            self.assertIn("flash_erase /dev/mtd3", generated)
+            self.assertIn("nandwrite -p /dev/mtd3", generated)
+            self.assertIn("GAR_IMX91S_DTB_UPDATE_COMPLETE", generated)
+            self.assertNotIn("fspinand", generated)
+            self.assertNotIn("/dev/mtd2", generated)
+            self.assertNotIn("/dev/mtd4", generated)
+            self.assertNotIn("ubiformat", generated)
+            self.assertNotIn("acmd reboot", generated)
+            self.assertNotRegex(generated, r"@@[A-Z0-9_]+@@")
+
+    def test_dtb_update_requires_confirmed_layout(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = self.make_components(root / "components")
+            config = self.write_config(root, confirmed=False)
+            output = root / "Update-dtb.lst"
+
+            result = self.run_script(
+                "generate-dtb-update.sh",
+                "--config",
+                config,
+                "--bundle-dir",
+                bundle,
+                "--output",
+                output,
+            )
+
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("requires GAR_IMX91S_NAND_LAYOUT_CONFIRMED=1", result.stderr)
+            self.assertFalse(output.exists())
+
     def test_stage_builds_a_self_describing_generic_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

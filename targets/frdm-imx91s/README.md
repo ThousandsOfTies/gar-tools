@@ -19,6 +19,8 @@ frdm-imx91s/
 ├── provisioning/uuu/
 │   ├── factory-spinand.lst.in
 │   ├── generate.sh
+│   ├── update-dtb.lst.in
+│   ├── generate-dtb-update.sh
 │   ├── generate-layout-probe.sh
 │   ├── stage.sh
 │   └── imx91s-uuu.env.example
@@ -103,6 +105,23 @@ targets/frdm-imx91s/provisioning/uuu/stage.sh \
 Run the generated factory script from its bundle directory. A successful run
 ends with `GAR_IMX91S_NAND_FLASH_COMPLETE`; it deliberately does not reboot,
 because forced USB disconnects are otherwise reported by libusb as failures.
+
+For a board-specific pinmux change, generate a guarded DTB-only updater. It
+boots the same manufacturing environment but erases and writes only the
+confirmed `dtb` partition; the bootloader, kernel, config, and rootfs remain
+untouched:
+
+```bash
+targets/frdm-imx91s/provisioning/uuu/generate-dtb-update.sh \
+  --config /path/to/product/config/imx91s-uuu.env \
+  --bundle-dir /path/to/components \
+  --output /path/to/components/Update-dtb-frdm-imx91s.lst \
+  --validate
+```
+
+A successful run ends with `GAR_IMX91S_DTB_UPDATE_COMPLETE` and deliberately
+leaves the board in manufacturing Linux. Power-cycle it in internal boot mode
+after UUU exits successfully.
 
 ## Board connections
 
