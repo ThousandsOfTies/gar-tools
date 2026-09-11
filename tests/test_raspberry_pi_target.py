@@ -30,10 +30,11 @@ class RaspberryPiTargetRecipeTest(unittest.TestCase):
             {
                 "type": "ssh-script",
                 "path": "provisioning/raspberry-pi-os-systemd",
-                "recipeVersion": 6,
+                "recipeVersion": 7,
                 "lifecycle": {
                     "type": "gar-app-lifecycle-v1",
                     "command": "/usr/local/lib/gar/gar-target-lifecycle",
+                    "stop": True,
                 },
             },
             manifest["provisioning"]["ssh_scp"],

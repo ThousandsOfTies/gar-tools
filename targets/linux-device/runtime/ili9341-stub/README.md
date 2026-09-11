@@ -55,8 +55,8 @@ launcherとweb bridgeが共有するため、個別指定は不要です。
 通常は選択済みのBuildEnvironmentでGARにbuild・配置させます。
 
 ```bash
-gar sim runtime build
-gar sim runtime deploy
+gar sim build runtime
+gar sim deploy runtime
 ```
 
 componentを単独で調査するときだけ、その環境に合うcompilerを明示します。
@@ -79,13 +79,13 @@ sudo ./cuse_spi_ili9341 -f --devname=spidev0.0 --dc-line=<lcd-dc-line>
 ```
 
 `-f`はforeground実行です。通常の常駐起動、hardware CSVの反映、device nodeの
-permission設定は`gar sim runtime start`が担当します。
+permission設定は`gar sim start runtime`が担当します。
 
 ## 動作確認の受け入れ基準
 
-1. `gar sim runtime start`で`cuse_spi_ili9341`が常駐し、`/dev/spidev0.0`が見える
+1. `gar sim start runtime`で`cuse_spi_ili9341`が常駐し、`/dev/spidev0.0`が見える
 2. `video_monitor.py`（LD_PRELOAD なし）が初期化シーケンスを流せてエラーにならない
 3. カラーバー分岐を表示させた状態で Virtual Hardware Panel の ILI9341 canvas に
    映像が表示される
 4. Hardware PanelからKY-040を回転させても表示が壊れない
-5. `gar sim runtime diag --json`がruntime全体を正常と判定する
+5. `gar sim diag runtime --json`がruntime全体を正常と判定する

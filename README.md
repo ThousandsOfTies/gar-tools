@@ -15,7 +15,7 @@ scriptではなく、`GaplessAgentRuntime`の`gar` CLIです。
 - `targets/raspberry-pi-5/`: Raspberry Pi OS実機とSSH/systemd provisioning recipe
 - `targets/frdm-imx91s/`: NXP FRDM-IMX91S向けUUU/SPI-NAND factory flow、
   read-only layout probe、WSL2 USB bring-up、再利用可能なstaging helper
-- `targets/*/target.json`: `gar setup`が検証・選択するtarget manifest
+- `targets/*/target.json`: `gar config`が検証・選択するtarget manifest
 - `docs/`: simulation設定とAI agent向けの補足資料
 
 各targetの`hardware/capabilities.json`はboard/OSが提供するGPIO、SPI、video、
@@ -38,18 +38,18 @@ GPIO割当はProduct側が所有します。
 commandを実行します。
 
 ```bash
-scripts/gar setup
+scripts/gar config
 scripts/gar hw init --dir path/to/product/hardware
 
 # Linux simulationの代表的な流れ
-scripts/gar sim host start
-scripts/gar sim runtime build
-scripts/gar sim runtime deploy
-scripts/gar sim runtime start
-scripts/gar sim runtime diag --json
+scripts/gar sim start host
+scripts/gar sim build runtime
+scripts/gar sim deploy runtime
+scripts/gar sim start runtime
+scripts/gar sim diag runtime --json
 ```
 
-application artifactは`gar sim app build/deploy`、実機用artifactは
+application artifactは`gar sim build app` / `gar sim deploy app`、実機用artifactは
 `gar target build/deploy`で扱います。workspaceを複数登録している場合は
 各commandへ`--workspace NAME`を指定します。
 

@@ -45,7 +45,7 @@ HTTP_PORT = int(os.environ.get("GAR_BRIDGE_PORT", "8080"))
 PANEL_DIR = Path(__file__).parent / "panel"
 COMPONENTS_DIR = Path(__file__).parent / "components"
 # Application artifacts select their screen by writing an absolute directory
-# here.  Reading it for each request deliberately makes `gar sim app deploy`
+# here.  Reading it for each request deliberately makes `gar sim deploy app`
 # switch a screen without restarting the bridge or the simulated hardware.
 PANEL_DIR_CONFIG = Path("/etc/gar/panel-dir")
 METRICS_DIR = Path(os.environ.get("GAR_METRICS_DIR", "/run/gar/metrics"))

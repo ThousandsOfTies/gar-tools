@@ -3,7 +3,7 @@
 SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-# gar sim runtime build passes CC for the selected simulation host. Keep the
+# gar sim build runtime passes CC for the selected simulation host. Keep the
 # direct-invocation default compatible with the EC2 Graviton runtime.
 ifeq ($(origin CC),default)
 CC = aarch64-linux-gnu-gcc

@@ -42,15 +42,15 @@ its Linux simulation host. From the `GaplessAgentRuntime` root, use the common
 artifact flow:
 
 ```bash
-scripts/gar setup
+scripts/gar config
 scripts/gar hw init --dir path/to/product/hardware
 
 # simulation
-scripts/gar sim host start
-scripts/gar sim runtime build
-scripts/gar sim runtime deploy
-scripts/gar sim runtime start
-scripts/gar sim runtime diag --json
+scripts/gar sim start host
+scripts/gar sim build runtime
+scripts/gar sim deploy runtime
+scripts/gar sim start runtime
+scripts/gar sim diag runtime --json
 
 # physical target
 scripts/gar target build

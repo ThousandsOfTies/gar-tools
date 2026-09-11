@@ -102,7 +102,9 @@ def manifest_layout_issues(
 
         actual_categories = set(manifest.default_backends)
         expected_categories = set(backend_ids_by_category)
-        missing_categories = expected_categories - actual_categories
+        # Host providers are a separate workspace choice. Hostless simulators
+        # and Target Packs need not declare a simulation_host default.
+        missing_categories = (expected_categories - {"simulation_host"}) - actual_categories
         if missing_categories:
             missing = ", ".join(sorted(missing_categories))
             issues.append(f"{path}: defaultBackends is missing categories: {missing}")

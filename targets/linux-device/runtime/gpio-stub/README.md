@@ -27,8 +27,8 @@ For the supported GPIO simulation path, let GAR inspect and start `gpio-sim`:
 ```bash
 gar sim gpio check --json
 gar sim gpio plan --json
-gar sim runtime start
-gar sim runtime diag --json
+gar sim start runtime
+gar sim diag runtime --json
 ```
 
 Run this CUSE spike directly only when investigating its ABI behavior:
@@ -50,6 +50,6 @@ lines= 54
 ```
 
 It does not solve the line-request fd handoff described above and is not the
-runtime acceptance target. Use `gar sim runtime diag --json` to verify the
+runtime acceptance target. Use `gar sim diag runtime --json` to verify the
 selected runtime, generated GPIO lines, bridge, and application-facing device
 nodes together.

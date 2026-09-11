@@ -39,10 +39,11 @@ class LuckfoxLyraTargetTests(unittest.TestCase):
             {
                 "type": "ssh-script",
                 "path": "provisioning/buildroot-busybox",
-                "recipeVersion": 5,
+                "recipeVersion": 6,
                 "lifecycle": {
                     "type": "gar-app-lifecycle-v1",
                     "command": "/usr/local/lib/gar/gar-target-lifecycle",
+                    "stop": True,
                 },
             },
             manifest["provisioning"]["ssh_scp"],

@@ -24,11 +24,11 @@ GAR orchestration and EC2 provisioning live in `GaplessAgentRuntime`.
 ## Local container
 
 ```bash
-gar sim host start --workspace <name>
-gar sim runtime build --workspace <name>
-gar sim runtime deploy --workspace <name>
-gar sim runtime start --workspace <name>
-gar sim runtime diag --workspace <name> --json
+gar sim start host --workspace <name>
+gar sim build runtime --workspace <name>
+gar sim deploy runtime --workspace <name>
+gar sim start runtime --workspace <name>
+gar sim diag runtime --workspace <name> --json
 ```
 
 `target.json` declares the image, its build context, and the devices and mounts
@@ -50,7 +50,7 @@ gar sim gpio check --json
 
 ### Build architecture
 
-`gar sim runtime build` exports `CC` and `GAR_SIM_ARCH` according to the selected
+`gar sim build runtime` exports `CC` and `GAR_SIM_ARCH` according to the selected
 simulator, so the runtime binaries match the simulation host:
 
 | simulator | `GAR_SIM_ARCH` | `CC` |

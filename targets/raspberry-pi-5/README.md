@@ -85,3 +85,16 @@ restartと収束判定は続くlifecycle `reload`へ一元化します。従来�
 `provisioning/raspberry-pi-os-systemd/`がsystemd型Target recipeのreference templateです。
 別distribution、別init system、read-only rootfsはGaplessAgentRuntimeへ条件分岐を
 追加せず、それぞれのTarget recipe/backendとして実装します。
+
+## Application stop capability
+
+Recipe version 7 declares `provisioning.ssh_scp.lifecycle.stop: true`.
+`gar target stop --workspace NAME --app APP` calls the recipe's `stop APP`,
+clears the recorded running build ID, stops the app service, and checks that
+it is no longer running. Repeated stop is supported for a deployed app.
+This stops the application for the current boot; it does not disable boot
+startup or power off the Target.
+
+Update the Product-pinned gar-tools checkout and run `gar target prepare`
+to install this helper before using stop. Rebuild artifacts after a recipe
+version change so later preflight/deploy/start checks see matching provenance.
