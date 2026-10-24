@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  />
+  <title>T-Watch 2020 · Peripheral bench</title>
+  <style>
+    body {
+      margin: 48px;
+      background: #edf1eb;
+      color: #183428;
+      font: 16px system-ui;
+    }
+    main {
+      max-width: 820px;
+      margin: auto;
+      display: flex;
+      gap: 64px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    h1 {
+      font-size: 27px;
+    }
+    pre {
+      max-width: 340px;
+      white-space: pre-wrap;
+    }
+    input {
+      accent-color: #237748;
+    }
+    gar-twatch-2020 {
+      flex-shrink: 0;
+    }
+  </style>
+  <main>
+    <gar-twatch-2020></gar-twatch-2020>
+    <section>
+      <small>GAR TOOLS · PERIPHERAL BENCH</small>
+      <h1>T-Watch 2020 V3</h1>
+      <p>240 × 240 display · touch · power</p>
+      <label
+        >Brightness <input type="range" min="0" max="100" value="85"
+      /></label>
+      <pre aria-live="polite">Touch the screen or press the side button.</pre>
+      <p>
+        This bench models peripherals in the browser.<br />It does not execute
+        an ESP32 binary.
+      </p>
+    </section>
+  </main>
+  <script type="module" src="./bench.mjs"></script>
+</html>

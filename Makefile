@@ -1,6 +1,7 @@
 # Gapless Agent Runtime target tools
 
 SHELL := /bin/bash
+.DEFAULT_GOAL := all
 .SHELLFLAGS := -eu -o pipefail -c
 
 # gar sim build runtime passes CC for the selected simulation host. Keep the
@@ -16,6 +17,10 @@ RUNTIME_DIR := targets/linux-device/runtime
 
 .PHONY: all linux-runtime examples experiments check check-python check-json
 .PHONY: check-shell check-js check-runtime-contract check-i2c clean
+.PHONY: web-simulator
+
+web-simulator:
+	$(PYTHON) web-simulator/serve.py $(if $(PANEL),--panel "$(PANEL)",)
 
 all: linux-runtime
 
@@ -33,6 +38,7 @@ check: check-python check-json check-shell check-js check-runtime-contract check
 check-python:
 	$(PYTHON) tools/check_python_syntax.py
 	$(PYTHON) -m unittest discover -s tests -v
+	$(PYTHON) -m unittest discover -s targets/esp32/web-simulator/tests -p 'test_*.py' -v
 	$(PYTHON) -m unittest discover -s targets/linux-device/runtime/web-bridge/tests -v
 
 check-json:
@@ -58,6 +64,10 @@ check-js:
 		exit 1; \
 	}
 	$(NODE) --check targets/linux-device/runtime/web-bridge/panel/panel.js
+	$(NODE) --check targets/esp32/web-simulator/components/twatch-2020.mjs
+	$(NODE) --check targets/esp32/web-simulator/components/lvgl-surface.mjs
+	$(NODE) --test targets/esp32/web-simulator/tests/*.test.mjs
+	$(NODE) --test web-simulator/tests/*.test.mjs
 
 check-runtime-contract:
 	$(PYTHON) tools/check_runtime_contract.py

@@ -44,6 +44,16 @@ HTTP_HOST = os.environ.get("GAR_BRIDGE_HOST", "127.0.0.1")
 HTTP_PORT = int(os.environ.get("GAR_BRIDGE_PORT", "8080"))
 PANEL_DIR = Path(__file__).parent / "panel"
 COMPONENTS_DIR = Path(__file__).parent / "components"
+# Target-independent browser parts, shared with static previews and other boards.
+# Source checkouts and installed runtimes use the same /gar-components contract.
+_SOURCE_WEB_COMPONENTS = Path(__file__).resolve().parents[4] / "web-simulator" / "components"
+_PACKAGED_WEB_COMPONENTS = Path(__file__).resolve().parent / "gar-components"
+WEB_COMPONENTS_DIR = Path(os.environ.get(
+    "GAR_WEB_COMPONENTS_DIR",
+    str(_SOURCE_WEB_COMPONENTS if _SOURCE_WEB_COMPONENTS.is_dir()
+        else _PACKAGED_WEB_COMPONENTS if _PACKAGED_WEB_COMPONENTS.is_dir()
+        else Path("/usr/local/share/gar/web-simulator/components")),
+))
 # Application artifacts select their screen by writing an absolute directory
 # here.  Reading it for each request deliberately makes `gar sim deploy app`
 # switch a screen without restarting the bridge or the simulated hardware.
@@ -1019,6 +1029,8 @@ async def panel_file_handler(request: web.Request) -> web.Response:
 
 def _resolve_panel_request(request_path: str) -> Path | None:
     """Resolve shared components first, then files owned by the active panel."""
+    if request_path.startswith("gar-components/"):
+        return resolve_panel_file(WEB_COMPONENTS_DIR, request_path.removeprefix("gar-components/"))
     if request_path.startswith("components/"):
         file_path = resolve_panel_file(
             COMPONENTS_DIR, request_path.removeprefix("components/")

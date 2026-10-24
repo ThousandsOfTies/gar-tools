@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GAR reusable PWM parts</title>
+<style>
+  body { max-width: 960px; margin: 32px auto; padding: 16px; font: 16px system-ui; color: #e9f3f8; background: #101820; }
+  .parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+  label { display: block; padding: 12px 0; } input { width: 100%; }
+</style>
+<h1>Reusable PWM parts</h1>
+<p>Two independent PCA9685 boards, with servos on channels 2 and 11. This local preview requires no Product code.</p>
+<div class="parts">
+  <section><gar-pca9685 id="board-a" address="0x40"></gar-pca9685><label>Board A, channel 2<input id="a" type="range" min="500" max="2500" value="1500"></label><gar-sg90 id="servo-a" controller-id="board-a" channel="2"></gar-sg90></section>
+  <section><gar-pca9685 id="board-b" address="0x41"></gar-pca9685><label>Board B, channel 11<input id="b" type="range" min="1000" max="2000" value="1500"></label><gar-sg90 id="servo-b" controller-id="board-b" channel="11" min-pulse-us="1000" max-pulse-us="2000"></gar-sg90></section>
+</div>
+<script type="module">
+  import './gar-components/pca9685.js';
+  import './gar-components/sg90.js';
+  import { TelemetryTransport } from './gar-components/telemetry-transport.mjs';
+  import { emptyPca9685State } from './gar-components/servo-model.mjs';
+  const source = new TelemetryTransport();
+  document.getElementById('board-a').transport = source;
+  document.getElementById('board-b').transport = source;
+  function update() {
+    const boards = [['a', 0x40, 2], ['b', 0x41, 11]].map(([input, address, channel]) => {
+      const state = emptyPca9685State();
+      state.address = address;
+      state.frequencyHz = 50;
+      state.channels[channel] = { channel, on: 0, off: Math.round(Number(document.getElementById(input).value) * 4096 * 50 / 1e6), fullOn: false, fullOff: false };
+      return state;
+    });
+    source.publish({ i2c: { pca9685: boards } });
+  }
+  for (const input of document.querySelectorAll('input')) input.addEventListener('input', update);
+  update();
+</script>
+</html>

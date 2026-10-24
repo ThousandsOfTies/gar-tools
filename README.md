@@ -6,8 +6,11 @@ scriptではなく、`GaplessAgentRuntime`の`gar` CLIです。
 
 主な内容:
 
+- `web-simulator/`: [App・target共通のシミュレータ部品](web-simulator/README.md)。
+  可変サイズ表示、LVGL、操作パネル、ログ、PCA9685、サーボ、ゲームパッド、通信を組み合わせて使います。
 - `targets/linux-device/`: Linux `/dev`互換runtimeとlocal Docker環境
-- `targets/esp32/`: ESP32/M5Stack向けWokwi、QEMU、Renode、実機probe
+- `targets/esp32/`: ESP32/M5Stack向けWokwi、QEMU、Renode、実機probe、
+  [T-Watch 2020 V3用Webコンポーネント](targets/esp32/web-simulator/README.md)
 - `targets/luckfox-rv1106/`: Luckfox Pico Plus/Pro/Max向けhardware定義、
   application雛形、simulation helper
 - `targets/luckfox-rk3506/`: Luckfox Lyra Plus（RK3506 / Buildroot / armv7l）

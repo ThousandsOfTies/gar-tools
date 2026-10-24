@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GAR Simulator Parts</title>
+<style>
+  *{box-sizing:border-box}body{margin:0;background:#f4f6f8;color:#233044;font:15px system-ui,sans-serif}
+  main{max-width:1120px;margin:auto;padding:40px 24px}h1{margin:0;font-size:30px}p{line-height:1.7;color:#5b6978}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:28px 0}
+  section{background:white;border:1px solid #dce3eb;border-radius:12px;padding:24px}h2{font-size:18px;margin:0 0 20px}
+  gar-display{margin:24px auto;width:100%;max-width:420px;border-radius:6px;overflow:hidden}
+  code{font-size:13px}a{color:#275f9d}@media(max-width:720px){.grid{grid-template-columns:1fr}}
+</style></head>
+<body><main><h1>GAR Simulator Parts</h1>
+<p>ディスプレイ・入力・状態操作・ログを組み合わせるサンプルです。ボードやAppを固定せず、同じ部品から異なる画面を作れます。</p>
+<div class="grid">
+  <section><h2>320 × 180 · センサーモニター</h2>
+    <gar-display id="wide" width="320" height="180" label="センサー値の表示"></gar-display>
+    <gar-sim-controls id="sensor"></gar-sim-controls>
+  </section>
+  <section><h2>128 × 64 · ステータス表示</h2>
+    <gar-display id="small" width="128" height="64" label="状態の表示"></gar-display>
+    <gar-sim-controls id="status"></gar-sim-controls>
+  </section>
+</div>
+<section><gar-event-log id="events" label="部品イベント" clear-label="クリア" empty-label="画面または操作パーツを操作してください。" max-entries="30"></gar-event-log></section>
+<p>このサンプルの差分は解像度、コントロールの定義、描画関数だけです。配線・校正・通信プロトコルは各App側で接続します。</p>
+</main><script type="module" src="./bench.mjs"></script></body></html>

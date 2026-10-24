@@ -1,13 +1,5 @@
-import { bridgeClient } from "./bridge-client.js";
+import { GarConnectionStatus } from '../gar-components/connection-status.mjs';
 
-class GarBridgeStatus extends HTMLElement {
-  connectedCallback() {
-    this.render(false);
-    bridgeClient.addEventListener("connection", ({ detail }) => this.render(detail.connected));
-  }
-  render(connected) {
-    this.textContent = connected ? "● Bridge connected" : "● Bridge reconnecting";
-    this.dataset.connected = String(connected);
-  }
-}
-customElements.define("gar-bridge-status", GarBridgeStatus);
+/** Legacy tag alias. The Product injects its connection through source. */
+export class GarBridgeStatus extends GarConnectionStatus {}
+if (!customElements.get('gar-bridge-status')) customElements.define('gar-bridge-status', GarBridgeStatus);
