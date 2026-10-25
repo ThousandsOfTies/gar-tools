@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>StickC Plus2 — component examples</title>
+<style>body{margin:40px;background:#18201e;color:#e8ece4;font:16px system-ui}main{display:flex;gap:70px;align-items:start;flex-wrap:wrap}section{max-width:480px}pre{white-space:pre-wrap}canvas{background:#07100d}</style>
+<h1>M5StickC Plus2 / 部品単体</h1><p>独立した2台。ボタンのA・Bでカウンタを増減、Cでリセット。液晶にタッチ入力はありません。</p>
+<main><section><h2>Landscape / 240 × 135</h2><gar-stickc-plus2 orientation="landscape" label="Landscape counter"><canvas slot="display" width="240" height="135"></canvas></gar-stickc-plus2><pre></pre></section>
+<section><h2>Portrait / 135 × 240</h2><gar-stickc-plus2 orientation="portrait" label="Portrait counter"><canvas slot="display" width="135" height="240"></canvas></gar-stickc-plus2><pre></pre></section></main>
+<script type="module" src="./parts.mjs"></script></html>

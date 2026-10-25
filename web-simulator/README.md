@@ -27,11 +27,18 @@ PWMサンプルは独立した2つのPCA9685・サーボを並べ、Product固�
 ボタン・矢印キー・フォーカス中のホイールで回転を入力できます。
 `make web-simulator`も共通サンプルを開きます。
 
+StickC Plus2の単体例は`--panel web-simulator/examples/stickc-parts`で起動できます。
+縦・横の2台を独立したカウンタとして操作でき、Appの意味や通信に依存しません。
+契約テストは`--panel web-simulator/tests/stickc-browser`で起動し、画面のPASS/FAILを確認します。
+ボタンにフォーカスしてA/B/C、またはSpace/Enterで押下・解放できます。
+`powered=false`でも電源用Cの入力は通知します。電源の長押し時間の解釈は接続先が行います。
+
 ## 部品を選ぶ
 
 | 部品 | API・用途 |
 | --- | --- |
 | `display.mjs` / `<gar-display>` | `width`, `height`, `powered`, `brightness`, `label`。`displayContext`に描画、または`writeFrame(bytes, {littleEndian})`でRGB565を表示。`gar-touch`に画素座標とstart/move/end/cancelを通知。 |
+| `m5stickc-plus2.mjs` / `<gar-stickc-plus2>` | StickC Plus2の筐体・LCD境界・A/B/Cボタン。`orientation="landscape\|portrait"`, `powered`, `label`。LCDは`slot="display"`にcanvas等を渡す。`gar-button`の`{button,phase,durationMs}`でdown/up/cancelを通知。液晶タッチ・通信・App操作の意味は持たない。 |
 | `framebuffer.mjs` | `decodeRgb565(bytes, {width, height, littleEndian})`。DOMなしで画素変換。旧boolean引数は240×240として対応。 |
 | `lvgl-surface.mjs` / `LvglSurface` | WASMの解像度に合わせて描画と入力を接続。App接続は交換可能なadapter。 |
 | `controls.mjs` / `<gar-sim-controls>` | 配列schemaからrange/checkbox/select/actionを生成。`values`と`gar-control`で接続。 |
