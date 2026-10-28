@@ -32,6 +32,7 @@ PWMサンプルは独立した2つのPCA9685・サーボを並べ、Product固�
 | 部品 | API・用途 |
 | --- | --- |
 | `display.mjs` / `<gar-display>` | `width`, `height`, `powered`, `brightness`, `label`。`displayContext`に描画、または`writeFrame(bytes, {littleEndian})`でRGB565を表示。`gar-touch`に画素座標とstart/move/end/cancelを通知。 |
+| `sbc-board.mjs` / `<gar-sbc-board>` | `label`, `soc`, `memory`, `architecture`, `powered` と `.ports` でSBCの模式図を構成。電源操作は `gar-board-power` の `detail.powered` で通知。`readonly` は表示専用。通信やProductの停止処理は含まない。 |
 | `framebuffer.mjs` | `decodeRgb565(bytes, {width, height, littleEndian})`。DOMなしで画素変換。旧boolean引数は240×240として対応。 |
 | `lvgl-surface.mjs` / `LvglSurface` | WASMの解像度に合わせて描画と入力を接続。App接続は交換可能なadapter。 |
 | `controls.mjs` / `<gar-sim-controls>` | 配列schemaからrange/checkbox/select/actionを生成。`values`と`gar-control`で接続。 |
@@ -129,6 +130,7 @@ python web-simulator/serve.py --panel web-simulator/tests/browser --port 8768
 python web-simulator/serve.py --panel web-simulator/tests/display-browser --port 8769
 python web-simulator/serve.py --panel web-simulator/tests/servo-browser --port 8770
 python web-simulator/serve.py --panel web-simulator/tests/input-browser --port 8771
+python web-simulator/serve.py --panel web-simulator/tests/board-browser --port 8775
 ```
 
 ブラウザ検証は各URLにPASSを表示します。CPU、無線、電気的挙動を再現する層ではなく、

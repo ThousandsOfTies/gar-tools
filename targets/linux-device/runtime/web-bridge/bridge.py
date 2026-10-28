@@ -136,6 +136,7 @@ state: dict[str, object] = {
         "mfrc522": {"uid": None, "present": False},
         "lcd": {"pixels": None},
         "ili9341": {"pixels": None, "width": 320, "height": 240},
+        "gc9a01": {"pixels": None, "width": 240, "height": 240},
     },
 }
 
@@ -558,12 +559,14 @@ def handle_stub_message(raw: str, loop: asyncio.AbstractEventLoop) -> str | None
             i2c_state["pca9685"] = controller
             _schedule_broadcast({"type": "pca9685", **controller}, loop)
 
-        elif event == "set" and device == "ili9341":
-            _require_device("ili9341")
-            width = bounded_int(message, "width", default=320, minimum=1, maximum=2048)
+        elif event == "set" and device in {"ili9341", "gc9a01"}:
+            _require_device(device)
+            width = bounded_int(message, "width", default=240 if device == "gc9a01" else 320, minimum=1, maximum=2048)
             height = bounded_int(
                 message, "height", default=240, minimum=1, maximum=2048
             )
+            if device == "gc9a01" and (width != 240 or height != 240):
+                raise RequestValidationError("GC9A01 frames must be 240x240")
             pixels = _pixel_data(
                 message,
                 "pixels",
@@ -571,14 +574,14 @@ def handle_stub_message(raw: str, loop: asyncio.AbstractEventLoop) -> str | None
             )
             spi_state = state["spi"]
             assert isinstance(spi_state, dict)
-            spi_state["ili9341"] = {
+            spi_state[device] = {
                 "pixels": pixels,
                 "width": width,
                 "height": height,
             }
             _schedule_broadcast(
                 {
-                    "type": "ili9341",
+                    "type": device,
                     "pixels": pixels,
                     "width": width,
                     "height": height,
