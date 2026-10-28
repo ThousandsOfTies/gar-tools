@@ -93,6 +93,7 @@ jobs:
           file targets/linux-device/runtime/i2c-stub/cuse_i2c | grep --quiet 'x86-64'
           file targets/linux-device/runtime/ili9341-stub/cuse_spi_ili9341 | grep --quiet 'x86-64'
           file targets/linux-device/runtime/gc9a01-stub/cuse_spi_gc9a01 | grep --quiet 'x86-64'
+          file targets/linux-device/runtime/rotary-input/gar_rotary_input | grep --quiet 'x86-64'
 
       - name: Clean native outputs
         run: make clean
@@ -110,3 +111,4 @@ jobs:
           file targets/linux-device/runtime/i2c-stub/cuse_i2c | grep --quiet 'ARM aarch64'
           file targets/linux-device/runtime/ili9341-stub/cuse_spi_ili9341 | grep --quiet 'ARM aarch64'
           file targets/linux-device/runtime/gc9a01-stub/cuse_spi_gc9a01 | grep --quiet 'ARM aarch64'
+          file targets/linux-device/runtime/rotary-input/gar_rotary_input | grep --quiet 'ARM aarch64'
