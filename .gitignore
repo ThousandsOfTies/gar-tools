@@ -12,6 +12,7 @@ targets/linux-device/runtime/gpio-stub/cuse_gpio
 targets/linux-device/runtime/i2c-stub/cuse_i2c
 targets/linux-device/runtime/spi-stub/cuse_spi
 targets/linux-device/runtime/ili9341-stub/cuse_spi_ili9341
+targets/linux-device/runtime/gc9a01-stub/cuse_spi_gc9a01
 targets/linux-device/runtime/test/vl53l0x_read
 targets/linux-device/runtime/test/gpio_led_button
 **/build/

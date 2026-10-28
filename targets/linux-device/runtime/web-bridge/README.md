@@ -20,8 +20,8 @@ interpret bridge messages. In the Product adapter, subscribe to
 `gar-rotary-input`, set the rotary's `value`, call the display's `writeFrame`,
 and inject the status indicator's `source`. `bridge-client.js` exports the
 configurable `BridgeClient` class (`new BridgeClient({url})`, then `connect()`),
-without a singleton. New panels use `/gar-components/*` directly; GarStreamRx's
-`panel/bridge-adapter.mjs` contains its bridge message mapping.
+without a singleton. New panels use `/gar-components/*` directly and keep bridge
+message mapping in their own Product adapter.
 
 The panel derives `ws://` or `wss://` and the port from its own URL. Therefore
 only the HTTP port has to be published by Docker or forwarded over SSH.
