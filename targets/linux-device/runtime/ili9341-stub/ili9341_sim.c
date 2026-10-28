@@ -37,14 +37,26 @@
 #define ILI9341_RAMWR  0x2C
 #define ILI9341_MADCTL 0x36
 
-#define MAX_W 320
-#define MAX_H 240
+#ifndef GAR_LCD_WIDTH
+#define GAR_LCD_WIDTH 320
+#endif
+#ifndef GAR_LCD_HEIGHT
+#define GAR_LCD_HEIGHT 240
+#endif
+#ifndef GAR_LCD_EVENT_NAME
+#define GAR_LCD_EVENT_NAME "ili9341"
+#endif
+#define MAX_W GAR_LCD_WIDTH
+#define MAX_H GAR_LCD_HEIGHT
 
 /* Push at most this often.  A full-screen blit() is split into ~4KB chunks
  * by ili9341.py, but the bridge must only receive a completed RAM window:
  * publishing after the first chunk makes almost the whole virtual panel stay
  * on the previous frame and looks like a frozen display. */
-#define PUSH_MIN_INTERVAL_S 0.1
+#ifndef GAR_LCD_PUSH_INTERVAL_S
+#define GAR_LCD_PUSH_INTERVAL_S 0.1
+#endif
+#define PUSH_MIN_INTERVAL_S GAR_LCD_PUSH_INTERVAL_S
 
 static uint8_t  framebuf[MAX_W * MAX_H * 2];
 static uint16_t panel_w = MAX_W, panel_h = MAX_H;
@@ -185,8 +197,8 @@ static void push_framebuffer(void) {
     char *msg = malloc(msg_cap);
     if (!msg) { free(b64); return; }
     int n = snprintf(msg, msg_cap,
-        "{\"event\":\"set\",\"device\":\"ili9341\",\"width\":%u,\"height\":%u,\"pixels\":\"%s\"}\n",
-        panel_w, panel_h, b64);
+        "{\"event\":\"set\",\"device\":\"%s\",\"width\":%u,\"height\":%u,\"pixels\":\"%s\"}\n",
+        GAR_LCD_EVENT_NAME, panel_w, panel_h, b64);
     if (n > 0 && write(s, msg, (size_t)n) < 0) {
         close(bridge_fd);
         bridge_fd = -1;
@@ -309,8 +321,8 @@ static void handle_data_bytes(const uint8_t *data, size_t len) {
 void ili9341_sim_init(void) {
     memset(framebuf, 0, sizeof(framebuf));
     reset_window();
-    fprintf(stderr, "[cuse_spi_ili9341] ILI9341 sim initialised (%ux%u, dc_line=%d)\n",
-            panel_w, panel_h, dc_line);
+    fprintf(stderr, "[cuse_spi_lcd] %s sim initialised (%ux%u, dc_line=%d)\n",
+            GAR_LCD_EVENT_NAME, panel_w, panel_h, dc_line);
 }
 
 void ili9341_sim_set_dc_line(int line) {
