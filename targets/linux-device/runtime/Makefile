@@ -28,6 +28,7 @@ experiments:
 check:
 	$(MAKE) -C i2c-stub check HOSTCC=$(HOSTCC)
 	$(MAKE) -C rotary-input check HOSTCC=$(HOSTCC)
+	$(MAKE) -C gc9a01-output check HOSTCC=$(HOSTCC)
 
 clean:
 	$(MAKE) -C spi-stub      clean

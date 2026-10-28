@@ -29,9 +29,11 @@ static int sample(int fd, struct gpio_v2_line_values *values) {
 }
 int main(int argc, char **argv) {
     const char *chip = NULL; int clock_line = -1, data_line = -1, switch_line = -1;
+    uint64_t bias = 0;
     const struct option options[] = {
         {"chip", required_argument, NULL, 'c'}, {"clock", required_argument, NULL, 'a'},
         {"data", required_argument, NULL, 'b'}, {"switch", required_argument, NULL, 's'},
+        {"bias", required_argument, NULL, 'p'},
         {"help", no_argument, NULL, 'h'}, {NULL, 0, NULL, 0}
     };
     int option;
@@ -41,7 +43,14 @@ int main(int argc, char **argv) {
         case 'a': clock_line = offset(optarg); break;
         case 'b': data_line = offset(optarg); break;
         case 's': switch_line = offset(optarg); break;
-        case 'h': puts("gar_rotary_input --chip /dev/gpiochipN --clock OFFSET --data OFFSET --switch OFFSET"); return 0;
+        case 'p':
+            if (!strcmp(optarg, "as-is")) bias = 0;
+            else if (!strcmp(optarg, "pull-up")) bias = GPIO_V2_LINE_FLAG_BIAS_PULL_UP;
+            else if (!strcmp(optarg, "pull-down")) bias = GPIO_V2_LINE_FLAG_BIAS_PULL_DOWN;
+            else if (!strcmp(optarg, "disabled")) bias = GPIO_V2_LINE_FLAG_BIAS_DISABLED;
+            else { fputs("Unknown GPIO bias\n", stderr); return 2; }
+            break;
+        case 'h': puts("gar_rotary_input --chip /dev/gpiochipN --clock OFFSET --data OFFSET --switch OFFSET [--bias as-is|pull-up|pull-down|disabled]"); return 0;
         default: return 2;
         }
     }
@@ -54,7 +63,7 @@ int main(int argc, char **argv) {
     struct gpio_v2_line_request request = {0};
     request.offsets[0] = (unsigned)clock_line; request.offsets[1] = (unsigned)data_line;
     request.offsets[2] = (unsigned)switch_line; request.num_lines = 3; request.event_buffer_size = 64;
-    request.config.flags = GPIO_V2_LINE_FLAG_INPUT | GPIO_V2_LINE_FLAG_EDGE_RISING | GPIO_V2_LINE_FLAG_EDGE_FALLING;
+    request.config.flags = GPIO_V2_LINE_FLAG_INPUT | GPIO_V2_LINE_FLAG_EDGE_RISING | GPIO_V2_LINE_FLAG_EDGE_FALLING | bias;
     strcpy(request.consumer, "GAR rotary input");
     if (ioctl(chip_fd, GPIO_V2_GET_LINE_IOCTL, &request) < 0) {
         perror("request rotary GPIO lines"); close(chip_fd); return 1;

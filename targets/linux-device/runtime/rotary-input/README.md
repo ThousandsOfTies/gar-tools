@@ -18,3 +18,8 @@ uses four quadrature transitions; partial/bouncing or diagonal transitions do
 not produce a detent. Switch presses have a 60 ms repeat suppression interval.
 Dropped kernel events discard the partial detent. Run `make check HOSTCC=gcc`
 for the platform-independent decoder tests.
+
+Use `--bias pull-up` to request the controller's internal pull-ups on all three
+lines. `pull-down`, `disabled`, and `as-is` are also accepted; the default is
+`as-is` for compatibility. Unsupported bias requests fail instead of silently
+leaving physical inputs floating. The GPIO request owns the bias for its lifetime.
