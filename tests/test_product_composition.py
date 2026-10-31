@@ -6,9 +6,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS / "composition"))
+from device import Device
 from package import configure_script, launch_script, package_product, render_service
 from product import Product, inside
 
@@ -106,6 +109,27 @@ class CompositionTests(unittest.TestCase):
         self.assertEqual("/opt/generic-product/app", manifest["deploy"]["app"]["files"][0]["dest"])
         with self.assertRaisesRegex(ValueError, "already exists"):
             package_product(Product(self.root), "artifacts/target")
+
+    def test_device_adapter_uses_board_identity_and_keeps_instance_data_out_of_reports(self):
+        self.save(".gar/device.json", {"serial": "TEST-LOCAL-ONLY", "sdk": "/external-sdk", "wslDistribution": "test"})
+        device = Device(self.root)
+        with patch.object(device, "remote", side_effect=[SimpleNamespace(stdout="armv7l\n"), SimpleNamespace(stdout="Wrong model\0")]) as remote:
+            with self.assertRaisesRegex(ValueError, "model"):
+                device.assert_device()
+            self.assertEqual(2, remote.call_count, "Reject the wrong board before any modifying command")
+        self.assertNotIn("TEST-LOCAL-ONLY", json.dumps(device.product.describe()))
+
+    def test_preflight_uses_selected_controller_identity(self):
+        from preflight import check
+        self.profile["gpio"][0].update(label="expected-chip", line_count=288)
+        def info(fd, command, data):
+            struct.pack_into("32s32sI", data, 0, b"gpiochip0", b"wrong-chip", 288)
+        with patch.dict(sys.modules, {"fcntl": SimpleNamespace(ioctl=Mock(side_effect=info))}), \
+                patch("preflight.Path.exists", return_value=True), \
+                patch("preflight.os.stat", return_value=SimpleNamespace(st_mode=0o020000)), \
+                patch("preflight.os.open", return_value=9), patch("preflight.os.close"), \
+                self.assertRaisesRegex(ValueError, "GPIO controller identity"):
+            check(self.profile, self.root / "hardware/real")
 
 
 if __name__ == "__main__":
