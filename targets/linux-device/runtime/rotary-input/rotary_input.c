@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "rotary_decoder.h"
+#include "rotary_sequence.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -72,7 +73,8 @@ int main(int argc, char **argv) {
     struct gpio_v2_line_values values = {0};
     if (sample(request.fd, &values) < 0) { perror("sample rotary GPIO"); close(request.fd); return 1; }
     struct rotary_decoder decoder = {phase_from_bits(values.bits), 0};
-    int pressed = !(values.bits & 4); uint64_t last_press = 0; unsigned last_sequence = 0;
+    int pressed = !(values.bits & 4); uint64_t last_press = 0;
+    struct rotary_sequences sequences = {{0}};
     long long counter = 0;
     struct sigaction action = {0}; action.sa_handler = stop; sigemptyset(&action.sa_mask);
     sigaction(SIGTERM, &action, NULL); sigaction(SIGINT, &action, NULL);
@@ -89,14 +91,17 @@ int main(int argc, char **argv) {
         ssize_t count = read(request.fd, &event, sizeof(event));
         if (count < 0 && errno == EINTR) continue;
         if (count != (ssize_t)sizeof(event)) { fputs("Incomplete rotary GPIO event\n", stderr); result = 1; break; }
-        if (last_sequence && event.seqno != last_sequence + 1) {
+        unsigned bit;
+        if (event.offset == (unsigned)clock_line) bit = 0;
+        else if (event.offset == (unsigned)data_line) bit = 1;
+        else if (event.offset == (unsigned)switch_line) bit = 2;
+        else continue;
+        if (rotary_sequence_lost(&sequences, bit, event.line_seqno)) {
             fputs("Rotary GPIO events lost; discarding incomplete detent\n", stderr);
             if (sample(request.fd, &values) < 0) { perror("resample rotary GPIO"); result = 1; break; }
             decoder.phase = phase_from_bits(values.bits); decoder.quarter_steps = 0;
-            pressed = !(values.bits & 4); last_sequence = event.seqno; continue;
+            pressed = !(values.bits & 4); continue;
         }
-        last_sequence = event.seqno;
-        unsigned bit = event.offset == (unsigned)clock_line ? 0 : event.offset == (unsigned)data_line ? 1 : 2;
         if (event.id == GPIO_V2_LINE_EVENT_RISING_EDGE) values.bits |= (uint64_t)1 << bit;
         else if (event.id == GPIO_V2_LINE_EVENT_FALLING_EDGE) values.bits &= ~((uint64_t)1 << bit);
         else continue;

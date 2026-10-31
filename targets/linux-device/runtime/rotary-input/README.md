@@ -16,8 +16,11 @@ the Product's actual controller and lines before using real hardware. Clock/data
 idle high and the switch is active low; provide suitable pull-ups. One detent
 uses four quadrature transitions; partial/bouncing or diagonal transitions do
 not produce a detent. Switch presses have a 60 ms repeat suppression interval.
-Dropped kernel events discard the partial detent. Run `make check HOSTCC=gcc`
-for the platform-independent decoder tests.
+Dropped queued events discard the partial detent. Loss detection uses each
+line's `line_seqno`, rather than the request-wide `seqno`: threaded GPIO IRQs
+can skip or repeat the latter during contact bounce without losing a queued
+event. Run `make check HOSTCC=gcc` for the decoder and sequence tests, including
+a physical Lyra trace of ten clockwise and ten counterclockwise clicks.
 
 Use `--bias pull-up` to request the controller's internal pull-ups on all three
 lines. `pull-down`, `disabled`, and `as-is` are also accepted; the default is
