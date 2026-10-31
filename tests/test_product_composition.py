@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS / "composition"))
 from device import Device
-from package import configure_script, launch_script, package_product, render_service
+from package import configure_script, install_script, launch_script, package_product, render_service
 from product import Product, inside
 
 
@@ -80,15 +80,20 @@ class CompositionTests(unittest.TestCase):
         self.assertEqual("S99zz-generic-product", name)
         self.assertIn('app_dir=/opt/generic-product/app', service)
         self.assertIn("recorded_start_time", service, "Reuse the existing PID identity protection")
+        installer = install_script(product, name)
+        self.assertLess(installer.index(" stop; fi"), installer.index("install -m 0755"), "Stop the old PID manager before replacing it")
         self.assertIn("/opt/generic-product/app/run.cjs", launch_script(product))
         self.assertIn("--speed 8000000", configure_script(product))
         self.assertNotIn("generic-product", configure_script(product), "Board preparation must be application-neutral")
         self.profile["startup"] = {"init": "systemd", "after": "systemd-udev-trigger.service", "device_wait_seconds": 15}
         self.save("sources/board/profiles/os.json", self.profile)
-        name, service = render_service(Product(self.root))
+        product = Product(self.root)
+        name, service = render_service(product)
         self.assertEqual("generic-product.service", name)
         self.assertIn("After=systemd-udev-trigger.service", service)
         self.assertIn("ExecStart=/opt/generic-product/app/run", service)
+        product.data["deployment"]["legacy_services"] = ["old-application.service"]
+        self.assertIn("systemctl disable --now old-application.service", install_script(product, name))
 
     def test_native_or_wrong_architecture_cannot_become_target_payload(self):
         self.target_binary(mode="native")

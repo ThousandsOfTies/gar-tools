@@ -131,10 +131,15 @@ def install_script(product, service_name):
              "configure_status=0", "./configure-target || configure_status=$?",
              'case "$configure_status" in 0|10) ;; *) exit "$configure_status" ;; esac']
     if product.profile["startup"]["init"] == "busybox":
-        lines += [f'install -m 0755 .startup/{service_name} /etc/init.d/{service_name}',
+        lines += [f'if test -x /etc/init.d/{service_name}; then /etc/init.d/{service_name} stop; fi',
+                  f'install -m 0755 .startup/{service_name} /etc/init.d/{service_name}',
                   f'/etc/init.d/{service_name} restart']
     else:
         user = product.data["deployment"]["user"]
+        for legacy in product.data["deployment"].get("legacy_services", []):
+            if not re.fullmatch(r"[a-zA-Z0-9_-]+\.service", legacy) or legacy == service_name:
+                raise ValueError("Invalid legacy service migration")
+            lines.append(f'if test -f /etc/systemd/system/{legacy}; then systemctl disable --now {legacy}; fi')
         lines += ["getent group gpio >/dev/null || groupadd --system gpio",
                   "getent group spi >/dev/null || groupadd --system spi",
                   f'id {quote(user)} >/dev/null 2>&1 || useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin {quote(user)}',
