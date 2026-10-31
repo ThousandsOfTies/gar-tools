@@ -1,6 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "rotary_decoder.h"
-#include "rotary_sequence.h"
+#include "rotary_config.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -31,10 +31,12 @@ static int sample(int fd, struct gpio_v2_line_values *values) {
 int main(int argc, char **argv) {
     const char *chip = NULL; int clock_line = -1, data_line = -1, switch_line = -1;
     uint64_t bias = 0;
+    unsigned debounce_us = 0;
     const struct option options[] = {
         {"chip", required_argument, NULL, 'c'}, {"clock", required_argument, NULL, 'a'},
         {"data", required_argument, NULL, 'b'}, {"switch", required_argument, NULL, 's'},
         {"bias", required_argument, NULL, 'p'},
+        {"debounce-us", required_argument, NULL, 'd'},
         {"help", no_argument, NULL, 'h'}, {NULL, 0, NULL, 0}
     };
     int option;
@@ -51,7 +53,13 @@ int main(int argc, char **argv) {
             else if (!strcmp(optarg, "disabled")) bias = GPIO_V2_LINE_FLAG_BIAS_DISABLED;
             else { fputs("Unknown GPIO bias\n", stderr); return 2; }
             break;
-        case 'h': puts("gar_rotary_input --chip /dev/gpiochipN --clock OFFSET --data OFFSET --switch OFFSET [--bias as-is|pull-up|pull-down|disabled]"); return 0;
+        case 'd': {
+            int period = rotary_debounce_period(optarg);
+            if (period < 0) { fputs("GPIO debounce must be 0..1000000 microseconds\n", stderr); return 2; }
+            debounce_us = (unsigned)period;
+            break;
+        }
+        case 'h': puts("gar_rotary_input --chip /dev/gpiochipN --clock OFFSET --data OFFSET --switch OFFSET [--bias as-is|pull-up|pull-down|disabled] [--debounce-us MICROSECONDS]"); return 0;
         default: return 2;
         }
     }
@@ -64,7 +72,7 @@ int main(int argc, char **argv) {
     struct gpio_v2_line_request request = {0};
     request.offsets[0] = (unsigned)clock_line; request.offsets[1] = (unsigned)data_line;
     request.offsets[2] = (unsigned)switch_line; request.num_lines = 3; request.event_buffer_size = 64;
-    request.config.flags = GPIO_V2_LINE_FLAG_INPUT | GPIO_V2_LINE_FLAG_EDGE_RISING | GPIO_V2_LINE_FLAG_EDGE_FALLING | bias;
+    rotary_configure_input(&request.config, bias, debounce_us);
     strcpy(request.consumer, "GAR rotary input");
     if (ioctl(chip_fd, GPIO_V2_GET_LINE_IOCTL, &request) < 0) {
         perror("request rotary GPIO lines"); close(chip_fd); return 1;
@@ -73,8 +81,7 @@ int main(int argc, char **argv) {
     struct gpio_v2_line_values values = {0};
     if (sample(request.fd, &values) < 0) { perror("sample rotary GPIO"); close(request.fd); return 1; }
     struct rotary_decoder decoder = {phase_from_bits(values.bits), 0};
-    int pressed = !(values.bits & 4); uint64_t last_press = 0;
-    struct rotary_sequences sequences = {{0}};
+    int pressed = !(values.bits & 4); uint64_t last_press = 0; unsigned last_sequence = 0;
     long long counter = 0;
     struct sigaction action = {0}; action.sa_handler = stop; sigemptyset(&action.sa_mask);
     sigaction(SIGTERM, &action, NULL); sigaction(SIGINT, &action, NULL);
@@ -91,17 +98,14 @@ int main(int argc, char **argv) {
         ssize_t count = read(request.fd, &event, sizeof(event));
         if (count < 0 && errno == EINTR) continue;
         if (count != (ssize_t)sizeof(event)) { fputs("Incomplete rotary GPIO event\n", stderr); result = 1; break; }
-        unsigned bit;
-        if (event.offset == (unsigned)clock_line) bit = 0;
-        else if (event.offset == (unsigned)data_line) bit = 1;
-        else if (event.offset == (unsigned)switch_line) bit = 2;
-        else continue;
-        if (rotary_sequence_lost(&sequences, bit, event.line_seqno)) {
+        if (last_sequence && event.seqno != last_sequence + 1) {
             fputs("Rotary GPIO events lost; discarding incomplete detent\n", stderr);
             if (sample(request.fd, &values) < 0) { perror("resample rotary GPIO"); result = 1; break; }
             decoder.phase = phase_from_bits(values.bits); decoder.quarter_steps = 0;
-            pressed = !(values.bits & 4); continue;
+            pressed = !(values.bits & 4); last_sequence = event.seqno; continue;
         }
+        last_sequence = event.seqno;
+        unsigned bit = event.offset == (unsigned)clock_line ? 0 : event.offset == (unsigned)data_line ? 1 : 2;
         if (event.id == GPIO_V2_LINE_EVENT_RISING_EDGE) values.bits |= (uint64_t)1 << bit;
         else if (event.id == GPIO_V2_LINE_EVENT_FALLING_EDGE) values.bits &= ~((uint64_t)1 << bit);
         else continue;
