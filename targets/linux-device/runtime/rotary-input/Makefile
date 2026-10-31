@@ -11,7 +11,7 @@ check:
 	trap 'rm -f "$$test_bin"' EXIT; \
 	$(HOSTCC) $(CFLAGS) -o "$$test_bin" test_rotary_decoder.c; "$$test_bin"; \
 	$(HOSTCC) $(CFLAGS) -o "$$test_bin" test_rotary_sequence.c; \
-	"$$test_bin" testdata/lyra-gpio-events.csv
+	"$$test_bin" ../../../../tests/fixtures/rotary-lyra-events.csv
 
 clean:
 	rm -f $(BIN)
