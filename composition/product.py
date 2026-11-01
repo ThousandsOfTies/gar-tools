@@ -122,6 +122,23 @@ class Product:
                 "hardware": self.data["hardware"], "launch": self.data["launch"],
                 "validated": {"gpio_lines": len(self.gpio), "spi_devices": len(self.spi)}}
 
+    def hardware_for(self, environment):
+        if environment == "physical":
+            return self.hardware
+        if environment != "simulation":
+            raise ValueError(f"Unknown hardware environment: {environment}")
+        settings = self.data["hardware"]
+        if not settings.get("simulation_overrides"):
+            # Existing Products with an independent simulation binding remain valid.
+            return inside(self.root, settings["simulation"])
+        relative = settings["simulation"]
+        output = inside(self.root, relative, exists=False)
+        if Path(relative).parts[0] not in (".gar", "build", "artifacts"):
+            raise ValueError("Generated simulation hardware must be under .gar/, build/ or artifacts/")
+        overrides = inside(self.root, settings["simulation_overrides"])
+        from hardware_profiles import generate
+        return generate(self.hardware, overrides, output)
+
     def build(self, *, native=False):
         self.validate()
         output = inside(self.root, self.data["build"]["directory"], exists=False)

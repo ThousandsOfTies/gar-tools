@@ -8,6 +8,7 @@ pin number or init-system rule is hard-coded in the Product hooks.
 ```sh
 python3 tools/product.py describe
 python3 tools/product.py validate
+python3 tools/product.py hardware --environment simulation
 GAR_BOARD_SDK=/external/sdk python3 tools/product.py build
 python3 tools/product.py package --output artifacts/a-new-release
 ```
@@ -34,5 +35,14 @@ compatible; this additive composition path does not rewrite their definitions.
 Board profiles contain a versioned resource inventory and preparation-provider
 parameters. Product CSVs contain actual peripheral assignments and debounce
 values. The board repository must not contain application names or wiring uses.
+
+Products can keep one physical GPIO/SPI binding and declare a small override CSV
+with `table,name,field,value` columns. Set `hardware.simulation_overrides` to that
+file and `hardware.simulation` to a generated path under `.gar/`, `build/` or
+`artifacts/`. The `hardware` command derives the simulation CSVs without modifying
+the canonical files. A name glob can apply a common policy to several rows.
+The application and simulated device provider must read that same generated
+directory. Generated files are not authored or committed. Existing Products
+without overrides continue using their separately selected simulation directory.
 
 Validation: `python3 -m unittest discover -s tests -p test_product_composition.py -v`.
