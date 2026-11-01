@@ -46,3 +46,28 @@ directory. Generated files are not authored or committed. Existing Products
 without overrides continue using their separately selected simulation directory.
 
 Validation: `python3 -m unittest discover -s tests -p test_product_composition.py -v`.
+
+## Embedded firmware profiles
+
+A board profile with `kind: platformio` declares its pinned PlatformIO version,
+platform/board/framework, driver dependencies, flash capacity, resources and I/O
+adapter paths. The Product selects resource names in a binding JSON and declares
+its application sources, includes, identity/options and firmware entry point.
+It contains no duplicated board pin numbers or driver implementation.
+
+`prepare` generates the `[board]` INI section, board constants, application
+constants and selected source includes under `.gar/composition/`. Headers are
+scoped by build-host platform so Windows firmware and Linux/WASM builds do not
+overwrite each other's absolute paths. Generated constants also work from C
+LVGL configuration headers. The fixed path-free `board.ini` is included by the
+Product's PlatformIO file. The Product adds its own app libraries and uses the
+generated source include list in exactly one translation unit.
+
+`build` prepares those files and compiles using an isolated PlatformIO runtime.
+It never opens a serial port. Firmware startup is Arduino `setup`/`loop`; it does
+not generate BusyBox/systemd files. Firmware and simulator artifact packaging
+continue using the Product's existing GAR build hooks; the Linux `package`
+command intentionally rejects MCU profiles. Core Target Pack transport and
+deployment contracts are unchanged.
+
+Validate with `python3 -m unittest discover -s tests -p test_embedded_composition.py -v`.
