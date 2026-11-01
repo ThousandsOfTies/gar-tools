@@ -46,12 +46,19 @@ jobs:
             libfuse3-dev \
             libfuse3-dev:arm64 \
             file \
-            python3
+            python3 \
+            python3-venv
+
+      - name: Install Python check dependencies
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python3 -m pip install \
+            -r targets/linux-device/runtime/web-bridge/requirements.txt
 
       - name: Run repository checks
         env:
           GAR_RUNTIME_ROOT: ${{ github.workspace }}/GaplessAgentRuntime
-        run: make check HOSTCC=gcc PYTHON=python3
+        run: make check HOSTCC=gcc PYTHON="$PWD/.venv/bin/python3"
 
       - name: Build Linux simulation image
         run: docker build --tag gar-linux-device:ci targets/linux-device
@@ -81,9 +88,12 @@ jobs:
           file targets/linux-device/runtime/spi-stub/cuse_spi
           file targets/linux-device/runtime/i2c-stub/cuse_i2c
           file targets/linux-device/runtime/ili9341-stub/cuse_spi_ili9341
+          file targets/linux-device/runtime/gc9a01-stub/cuse_spi_gc9a01
           file targets/linux-device/runtime/spi-stub/cuse_spi | grep --quiet 'x86-64'
           file targets/linux-device/runtime/i2c-stub/cuse_i2c | grep --quiet 'x86-64'
           file targets/linux-device/runtime/ili9341-stub/cuse_spi_ili9341 | grep --quiet 'x86-64'
+          file targets/linux-device/runtime/gc9a01-stub/cuse_spi_gc9a01 | grep --quiet 'x86-64'
+          file targets/linux-device/runtime/rotary-input/gar_rotary_input | grep --quiet 'x86-64'
 
       - name: Clean native outputs
         run: make clean
@@ -96,6 +106,9 @@ jobs:
           file targets/linux-device/runtime/spi-stub/cuse_spi
           file targets/linux-device/runtime/i2c-stub/cuse_i2c
           file targets/linux-device/runtime/ili9341-stub/cuse_spi_ili9341
+          file targets/linux-device/runtime/gc9a01-stub/cuse_spi_gc9a01
           file targets/linux-device/runtime/spi-stub/cuse_spi | grep --quiet 'ARM aarch64'
           file targets/linux-device/runtime/i2c-stub/cuse_i2c | grep --quiet 'ARM aarch64'
           file targets/linux-device/runtime/ili9341-stub/cuse_spi_ili9341 | grep --quiet 'ARM aarch64'
+          file targets/linux-device/runtime/gc9a01-stub/cuse_spi_gc9a01 | grep --quiet 'ARM aarch64'
+          file targets/linux-device/runtime/rotary-input/gar_rotary_input | grep --quiet 'ARM aarch64'
