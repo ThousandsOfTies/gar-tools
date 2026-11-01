@@ -9,11 +9,19 @@ One aiohttp server provides all browser-facing endpoints:
 - `ws://HOST:8080/ws` — live events and panel commands
 - `GAR_HW_SIM_SOCK` — newline-delimited JSON Unix socket used by C stubs
 
-Files under the shared runtime's `components/` directory take precedence at
-`/components/*`. If a shared component with that name does not exist, the
-request falls back to the active Product panel. This lets a Product ship Web
-Components under its own `panel/components/` directory without copying them
-into reusable target tooling.
+Target-independent Web Components are served at `/gar-components/*` from the
+shared `web-simulator/components` library. The legacy runtime components remain
+available at `/components/*`; if a Product component with that name does not
+exist in the runtime, the request falls back to the active Product panel.
+
+Legacy tags `gar-rotary-control`, `gar-ili9341-display` and `gar-bridge-status`
+now reuse the shared Shadow DOM components. They do not open a connection or
+interpret bridge messages. In the Product adapter, subscribe to
+`gar-rotary-input`, set the rotary's `value`, call the display's `writeFrame`,
+and inject the status indicator's `source`. `bridge-client.js` exports the
+configurable `BridgeClient` class (`new BridgeClient({url})`, then `connect()`),
+without a singleton. New panels use `/gar-components/*` directly; GarStreamRx's
+`panel/bridge-adapter.mjs` contains its bridge message mapping.
 
 The panel derives `ws://` or `wss://` and the port from its own URL. Therefore
 only the HTTP port has to be published by Docker or forwarded over SSH.
