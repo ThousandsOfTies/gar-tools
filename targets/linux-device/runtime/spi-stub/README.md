@@ -43,8 +43,8 @@ ATQA・UID を返し、UID は bridge から取得したカードのものを使
 通常は選択済みのBuildEnvironmentでGARにbuildさせます。
 
 ```bash
-gar sim runtime build
-gar sim runtime deploy
+gar sim build runtime
+gar sim deploy runtime
 ```
 
 componentを単独で調査するときだけ、その環境に合うcompilerを明示してMakefileを
@@ -59,7 +59,7 @@ make -C targets/linux-device/runtime/spi-stub CC=gcc
 ```
 
 `libfuse3-dev`（`/usr/include/fuse3`）が必要です。GARは生成したruntime
-artifactを`gar sim runtime deploy`で選択済みsimulation hostへ配置します。
+artifactを`gar sim deploy runtime`で選択済みsimulation hostへ配置します。
 
 ## 起動
 
@@ -69,16 +69,16 @@ sudo ./cuse_spi -f --devname=spidev0.0
 ```
 
 `-f`はforeground実行です。通常の常駐起動とdevice nodeのpermission設定は
-`gar sim runtime start`が担当します。
+`gar sim start runtime`が担当します。
 
 ## 動作確認の受け入れ基準
 
 「`/dev/spidev0.0` が生えた」「ioctl が通った」だけでは done にしません。
 
-1. `gar sim runtime start`で`cuse_spi`が常駐し、`/dev/spidev0.0`が見える
+1. `gar sim start runtime`で`cuse_spi`が常駐し、`/dev/spidev0.0`が見える
 2. `sensor_demo`（LD_PRELOADなし）がVersionReg=0x92を読んで初期化に成功する
 3. `gar sim io set --device rfid --uid 04:AB:CD:EF:01:23`の後にUIDが表示される
 4. `gar sim io clear --device rfid`でカード無しの挙動に戻る
-5. `gar sim runtime diag --json`がruntime全体を正常と判定する
+5. `gar sim diag runtime --json`がruntime全体を正常と判定する
 
 ここまで確認できて初めて S4 完了です。

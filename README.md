@@ -6,14 +6,19 @@ scriptではなく、`GaplessAgentRuntime`の`gar` CLIです。
 
 主な内容:
 
+- `web-simulator/`: [App・target共通のシミュレータ部品](web-simulator/README.md)。
+  可変サイズ表示、LVGL、操作パネル、ログ、PCA9685、サーボ、ゲームパッド、通信を組み合わせて使います。
 - `targets/linux-device/`: Linux `/dev`互換runtimeとlocal Docker環境
-- `targets/esp32/`: ESP32/M5Stack向けWokwi、QEMU、Renode、実機probe
+- `targets/esp32/`: ESP32/M5Stack向けWokwi、QEMU、Renode、実機probe、
+  [T-Watch 2020 V3用Webコンポーネント](targets/esp32/web-simulator/README.md)
 - `targets/luckfox-rv1106/`: Luckfox Pico Plus/Pro/Max向けhardware定義、
   application雛形、simulation helper
 - `targets/luckfox-rk3506/`: Luckfox Lyra Plus（RK3506 / Buildroot / armv7l）
   実機Target定義。RV1106とは独立して選択する
 - `targets/raspberry-pi-5/`: Raspberry Pi OS実機とSSH/systemd provisioning recipe
-- `targets/*/target.json`: `gar setup`が検証・選択するtarget manifest
+- `targets/frdm-imx91s/`: NXP FRDM-IMX91S向けUUU/SPI-NAND factory flow、
+  read-only layout probe、WSL2 USB bring-up、再利用可能なstaging helper
+- `targets/*/target.json`: `gar config`が検証・選択するtarget manifest
 - `docs/`: simulation設定とAI agent向けの補足資料
 
 各targetの`hardware/capabilities.json`はboard/OSが提供するGPIO、SPI、video、
@@ -36,18 +41,18 @@ GPIO割当はProduct側が所有します。
 commandを実行します。
 
 ```bash
-scripts/gar setup
+scripts/gar config
 scripts/gar hw init --dir path/to/product/hardware
 
 # Linux simulationの代表的な流れ
-scripts/gar sim host start
-scripts/gar sim runtime build
-scripts/gar sim runtime deploy
-scripts/gar sim runtime start
-scripts/gar sim runtime diag --json
+scripts/gar sim start host
+scripts/gar sim build runtime
+scripts/gar sim deploy runtime
+scripts/gar sim start runtime
+scripts/gar sim diag runtime --json
 ```
 
-application artifactは`gar sim app build/deploy`、実機用artifactは
+application artifactは`gar sim build app` / `gar sim deploy app`、実機用artifactは
 `gar target build/deploy`で扱います。workspaceを複数登録している場合は
 各commandへ`--workspace NAME`を指定します。
 

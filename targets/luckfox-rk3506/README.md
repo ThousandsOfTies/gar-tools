@@ -76,3 +76,16 @@ application components or wiring. Product CSV assignments, requirements, and
 physical bindings are kept outside this Target and supplied by the selected
 Product workspace. This separation lets GAR reject incompatible assignments
 before a deploy without turning a board definition into an application profile.
+
+## Application stop capability
+
+Recipe version 6 declares `provisioning.ssh_scp.lifecycle.stop: true`.
+`gar target stop --workspace NAME --app APP` calls the recipe's `stop APP`,
+clears the recorded running build ID, stops the app service, and checks that
+it is no longer running. Repeated stop is supported for a deployed app.
+This stops the application for the current boot; it does not disable boot
+startup or power off the Target.
+
+Update the Product-pinned gar-tools checkout and run `gar target prepare`
+to install this helper before using stop. Rebuild artifacts after a recipe
+version change so later preflight/deploy/start checks see matching provenance.

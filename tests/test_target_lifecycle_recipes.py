@@ -306,6 +306,38 @@ class TargetLifecycleRecipeTests(unittest.TestCase):
             stopped = self._run(launcher, "stop")
             self.assertEqual(0, stopped.returncode, stopped.stderr)
 
+    def test_stop_clears_verified_build_and_is_idempotent(self) -> None:
+        for sandbox in (self._systemd_sandbox, self._busybox_sandbox):
+            with self.subTest(sandbox=sandbox.__name__), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                helper = sandbox(root)
+                self._exercise_contract(helper, root)
+                self.assertEqual(0, self._run(helper, "reload", "demo", "--build-id", "build:two").returncode)
+                for _ in range(2):
+                    stopped = self._run(helper, "stop", "demo")
+                    self.assertEqual(0, stopped.returncode, stopped.stderr)
+                    self.assertIn("demo is stopped", stopped.stdout)
+                    self.assertFalse((root / "state" / "demo.build-id").exists())
+                    self.assertEqual(1, self._run(helper, "status", "demo").returncode)
+                    self.assertEqual(1, self._run(helper, "running-build-id", "demo").returncode)
+                self.assertEqual(2, self._run(helper, "stop", "demo", "extra").returncode)
+                self.assertEqual(2, self._run(helper, "stop", "../escape").returncode)
+
+    def test_stop_reports_controller_failure_and_invalidates_running_build(self) -> None:
+        for sandbox in (self._systemd_sandbox, self._busybox_sandbox):
+            with self.subTest(sandbox=sandbox.__name__), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                helper = sandbox(root)
+                self._exercise_contract(helper, root)
+                controller = root / "bin" / "systemctl" if sandbox == self._systemd_sandbox else root / "init.d" / "S95gar-demo"
+                content = controller.read_text(encoding="utf-8")
+                controller.write_text(content.replace('stop) rm -f "$running"', 'stop) exit 7'), encoding="utf-8")
+                stopped = self._run(helper, "stop", "demo")
+                self.assertEqual(1, stopped.returncode, stopped.stderr)
+                self.assertIn("failed to stop", stopped.stderr)
+                self.assertFalse((root / "state" / "demo.build-id").exists())
+                self.assertEqual(0, self._run(helper, "status", "demo").returncode)
+
     def _exercise_contract(
         self,
         helper: Path,
@@ -375,6 +407,7 @@ class TargetLifecycleRecipeTests(unittest.TestCase):
             'case "$1" in\n'
             '  is-active) [ -f "$running" ] ;;\n'
             '  restart) : >"$running" ;;\n'
+            '  stop) rm -f "$running" ;;\n'
             "  *) exit 2 ;;\n"
             "esac\n",
         )
@@ -403,6 +436,7 @@ class TargetLifecycleRecipeTests(unittest.TestCase):
             'case "$1" in\n'
             '  status) [ -f "$running" ] ;;\n'
             '  restart) : >"$running" ;;\n'
+            '  stop) rm -f "$running" ;;\n'
             "  *) exit 2 ;;\n"
             "esac\n",
         )

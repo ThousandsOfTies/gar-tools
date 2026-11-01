@@ -44,16 +44,16 @@ Use only for API availability testing, not quality/performance validation.
 
 ## Normal GAR flow
 
-Run these commands from the `GaplessAgentRuntime` root after `gar setup`:
+Run these commands from the `GaplessAgentRuntime` root after `gar config`:
 
 ```bash
-scripts/gar sim host start
-scripts/gar sim runtime build
-scripts/gar sim runtime deploy
-scripts/gar sim runtime start
-scripts/gar sim app build
-scripts/gar sim app deploy
-scripts/gar sim runtime diag --json
+scripts/gar sim start host
+scripts/gar sim build runtime
+scripts/gar sim deploy runtime
+scripts/gar sim start runtime
+scripts/gar sim build app
+scripts/gar sim deploy app
+scripts/gar sim diag runtime --json
 ```
 
 GAR chooses the build architecture, transports immutable artifacts, starts the

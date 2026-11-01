@@ -44,8 +44,8 @@ HTTP_HOST = os.environ.get("GAR_BRIDGE_HOST", "127.0.0.1")
 HTTP_PORT = int(os.environ.get("GAR_BRIDGE_PORT", "8080"))
 PANEL_DIR = Path(__file__).parent / "panel"
 COMPONENTS_DIR = Path(__file__).parent / "components"
-# Target-independent browser parts are served from the shared web-simulator
-# package. Product panels import these through the stable /gar-components path.
+# Target-independent browser parts, shared with static previews and other boards.
+# Source checkouts and installed runtimes use the same /gar-components contract.
 _SOURCE_WEB_COMPONENTS = Path(__file__).resolve().parents[4] / "web-simulator" / "components"
 _PACKAGED_WEB_COMPONENTS = Path(__file__).resolve().parent / "gar-components"
 WEB_COMPONENTS_DIR = Path(os.environ.get(
@@ -55,7 +55,7 @@ WEB_COMPONENTS_DIR = Path(os.environ.get(
         else Path("/usr/local/share/gar/web-simulator/components")),
 ))
 # Application artifacts select their screen by writing an absolute directory
-# here.  Reading it for each request deliberately makes `gar sim app deploy`
+# here.  Reading it for each request deliberately makes `gar sim deploy app`
 # switch a screen without restarting the bridge or the simulated hardware.
 PANEL_DIR_CONFIG = Path("/etc/gar/panel-dir")
 METRICS_DIR = Path(os.environ.get("GAR_METRICS_DIR", "/run/gar/metrics"))
@@ -136,6 +136,7 @@ state: dict[str, object] = {
         "mfrc522": {"uid": None, "present": False},
         "lcd": {"pixels": None},
         "ili9341": {"pixels": None, "width": 320, "height": 240},
+        "gc9a01": {"pixels": None, "width": 240, "height": 240},
     },
 }
 
@@ -558,12 +559,14 @@ def handle_stub_message(raw: str, loop: asyncio.AbstractEventLoop) -> str | None
             i2c_state["pca9685"] = controller
             _schedule_broadcast({"type": "pca9685", **controller}, loop)
 
-        elif event == "set" and device == "ili9341":
-            _require_device("ili9341")
-            width = bounded_int(message, "width", default=320, minimum=1, maximum=2048)
+        elif event == "set" and device in {"ili9341", "gc9a01"}:
+            _require_device(device)
+            width = bounded_int(message, "width", default=240 if device == "gc9a01" else 320, minimum=1, maximum=2048)
             height = bounded_int(
                 message, "height", default=240, minimum=1, maximum=2048
             )
+            if device == "gc9a01" and (width != 240 or height != 240):
+                raise RequestValidationError("GC9A01 frames must be 240x240")
             pixels = _pixel_data(
                 message,
                 "pixels",
@@ -571,14 +574,14 @@ def handle_stub_message(raw: str, loop: asyncio.AbstractEventLoop) -> str | None
             )
             spi_state = state["spi"]
             assert isinstance(spi_state, dict)
-            spi_state["ili9341"] = {
+            spi_state[device] = {
                 "pixels": pixels,
                 "width": width,
                 "height": height,
             }
             _schedule_broadcast(
                 {
-                    "type": "ili9341",
+                    "type": device,
                     "pixels": pixels,
                     "width": width,
                     "height": height,

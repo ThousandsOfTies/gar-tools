@@ -208,7 +208,7 @@ def _assert_hardware_mapping(
         assert gpio["inputs"] == [17, 27]
         assert gpio["outputs"] == [18, 24]
         assert gpio["rotary"] is None
-        assert devices == ["mfrc522", "ssd1306", "vl53l0x"]
+        assert devices == ["mfrc522", "pca9685", "ssd1306", "vl53l0x"]
         return "linux-device", {"req": "get", "device": "gpio", "line": 17}
 
     if hardware_dir.name == "hardware" and hardware_dir.parent.name == "luckfox-rv1106":

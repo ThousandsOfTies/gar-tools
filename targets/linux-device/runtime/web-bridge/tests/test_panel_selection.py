@@ -20,6 +20,17 @@ else:
 
 @unittest.skipUnless(bridge is not None, "bridge tests require aiohttp")
 class PanelSelectionTests(unittest.TestCase):
+    def test_shared_browser_parts_are_served_without_product_asset_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            shared = Path(temporary_dir) / "shared"
+            shared.mkdir()
+            component = shared / "sg90.js"
+            component.write_text("shared servo", encoding="utf-8")
+            with patch.object(bridge, "WEB_COMPONENTS_DIR", shared):
+                self.assertEqual(component, bridge._resolve_panel_request("gar-components/sg90.js"))
+                self.assertIsNone(bridge._resolve_panel_request("gar-components/../bridge.py"))
+                self.assertIsNone(bridge._resolve_panel_request("gar-components/missing.js"))
+
     def test_configured_application_panel_replaces_default_panel(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             root = Path(temporary_dir)

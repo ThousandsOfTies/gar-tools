@@ -14,6 +14,11 @@ These are optional target tools. The default GAR setup path for ESP32/M5Stack is
 Wokwi; QEMU, Renode, and fake-idf should be pulled into the workflow only
 when a specific verification task needs them.
 
+For browser-based peripheral/UI work, [`web-simulator/`](web-simulator/README.md)
+provides a reusable `<gar-twatch-2020>` Web Component, RGB565 framebuffer input,
+touch/power events, and a local server/static exporter for Product-owned panels.
+It does not execute an ESP32 binary and does not change the default backend.
+
 1. Build or collect a flash bundle:
    - `bootloader.bin`
    - `partitions.bin`

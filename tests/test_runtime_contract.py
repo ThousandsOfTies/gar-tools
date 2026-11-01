@@ -106,6 +106,16 @@ class ManifestLayoutTest(unittest.TestCase):
             self.assertIn("toolsRoot", message)
             self.assertIn("codespace, target", message)
 
+    def test_simulation_host_default_is_optional_but_validated_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tools_root = Path(tmp)
+            self._write_manifest(tools_root, "board")
+            manifest = self._manifest("board")
+            backends = {"codespace": {"local"}, "simulator": {"sim"}, "target": {"deploy"}, "simulation_host": {"virtualbox"}}
+            self.assertEqual([], manifest_layout_issues(tools_root, [manifest], backends))
+            manifest.default_backends["simulation_host"] = "missing"
+            self.assertIn("unknown backend 'missing'", "\n".join(manifest_layout_issues(tools_root, [manifest], backends)))
+
     def test_reports_unknown_backend_and_category(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tools_root = Path(tmp)

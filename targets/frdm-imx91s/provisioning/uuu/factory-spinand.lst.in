@@ -1,0 +1,97 @@
+uuu_version @@UUU_VERSION@@
+
+# Generated for a Product using the NXP FRDM-IMX91S onboard SPI-NAND.
+# NAND geometry and fixed partitions come from imx91-11x11-frdm-imx91s.dts:
+# bootloader=8MiB, config=8MiB, kernel=36MiB, dtb=128KiB, rootfs=remainder.
+# The confirmation command fails before the first NAND write unless the
+# generator was run with GAR_IMX91S_NAND_LAYOUT_CONFIRMED=1.
+
+# Boot the proven SD/manufacturing U-Boot over USB Serial Downloader. The
+# SPI-NAND image has a NAND-specific SPL transition and is only the payload for
+# fspinand below; using it for SDPS boot disconnects around the SPL boundary.
+SDPS[-t 10000]: boot -scanterm -f pub/u-boot/@@RAM_BOOT_IMAGE@@ -scanlimited 0x800000
+
+# Write the ROM-bootable SPI-NAND image with NXP's fspinand command. The image
+# is first copied to loadaddr in full 1 MiB chunks to avoid the deterministic
+# WSL/Fastboot timeout on a final short chunk.
+FB: ucmd test @@NAND_LAYOUT_CONFIRMED@@ = 1
+FB: ucmd setenv gar_nand_boot_addr ${loadaddr}
+FB: ucmd setenv fastboot_buffer @@FASTBOOT_BUFFER@@
+FB[-t @@TRANSFER_TIMEOUT_MS@@]: write -f @@NAND_BOOT_TRANSFER@@ -format "setexpr gar_copy_dst ${gar_nand_boot_addr} + @off; cp.b ${fastboot_buffer} ${gar_copy_dst} @size" -blksz 1 -each @@TRANSFER_CHUNK_SIZE@@
+FB: ucmd setenv gar_nand_boot_size @@NAND_BOOT_SIZE@@
+FB[-t 60000]: ucmd fspinand init @@NAND_DEVICE@@ ${gar_nand_boot_addr} ${gar_nand_boot_size}
+
+# Load the manufacturing Linux kernel, DTB, and legacy initramfs into RAM.
+FB: ucmd setenv gar_kernel_addr ${loadaddr}
+FB: ucmd setenv fastboot_buffer @@FASTBOOT_BUFFER@@
+FB[-t @@TRANSFER_TIMEOUT_MS@@]: write -f @@KERNEL_TRANSFER@@ -format "setexpr gar_copy_dst ${gar_kernel_addr} + @off; cp.b ${fastboot_buffer} ${gar_copy_dst} @size" -blksz 1 -each @@TRANSFER_CHUNK_SIZE@@
+FB: ucmd setenv gar_kernel_size @@KERNEL_SIZE@@
+
+FB: ucmd setenv gar_dtb_addr ${fdt_addr_r}
+FB: ucmd setenv fastboot_buffer @@FASTBOOT_BUFFER@@
+FB[-t @@TRANSFER_TIMEOUT_MS@@]: write -f @@DTB_TRANSFER@@ -format "setexpr gar_copy_dst ${gar_dtb_addr} + @off; cp.b ${fastboot_buffer} ${gar_copy_dst} @size" -blksz 1 -each @@TRANSFER_CHUNK_SIZE@@
+FB: ucmd setenv gar_dtb_size @@DTB_SIZE@@
+
+FB: ucmd setenv gar_initrd_addr @@INITRD_ADDR@@
+FB: ucmd setenv fastboot_buffer @@FASTBOOT_BUFFER@@
+FB[-t @@TRANSFER_TIMEOUT_MS@@]: write -f @@INITRD_TRANSFER@@ -format "setexpr gar_copy_dst ${gar_initrd_addr} + @off; cp.b ${fastboot_buffer} ${gar_copy_dst} @size" -blksz 1 -each @@TRANSFER_CHUNK_SIZE@@
+FB: ucmd setenv gar_initrd_size @@INITRD_SIZE@@
+FB: ucmd run mfgtool_args
+FB: ucmd iminfo ${gar_initrd_addr}
+FB: ucmd setenv gar_bootcmd booti ${gar_kernel_addr} ${gar_initrd_addr} ${gar_dtb_addr}
+FB: acmd run gar_bootcmd
+
+# Verify live DT partition names, sizes, and required manufacturing tools before
+# Linux performs any further writes. Sizes are decimal bytes from sysfs.
+FBK: ucmd test "$(cat /sys/class/mtd/mtd@@BOOTLOADER_MTD@@/name)" = bootloader
+FBK: ucmd test "$(cat /sys/class/mtd/mtd@@BOOTLOADER_MTD@@/size)" = 8388608
+FBK: ucmd test "$(cat /sys/class/mtd/mtd@@CONFIG_MTD@@/name)" = config
+FBK: ucmd test "$(cat /sys/class/mtd/mtd@@CONFIG_MTD@@/size)" = 8388608
+FBK: ucmd test "$(cat /sys/class/mtd/mtd@@KERNEL_MTD@@/name)" = kernel
+FBK: ucmd test "$(cat /sys/class/mtd/mtd@@KERNEL_MTD@@/size)" = 37748736
+FBK: ucmd test "$(cat /sys/class/mtd/mtd@@DTB_MTD@@/name)" = dtb
+FBK: ucmd test "$(cat /sys/class/mtd/mtd@@DTB_MTD@@/size)" = 131072
+FBK: ucmd test "$(cat /sys/class/mtd/mtd@@ROOTFS_MTD@@/name)" = rootfs
+FBK: ucmd test "$(cat /sys/class/mtd/mtd@@ROOTFS_MTD@@/size)" = 213778432
+FBK: ucmd command -v flash_erase
+FBK: ucmd command -v nandwrite
+FBK: ucmd command -v ubiformat
+FBK: ucmd command -v ubiattach
+FBK: ucmd command -v ubidetach
+FBK: ucmd command -v ubimkvol
+FBK: ucmd command -v stat
+
+# Stage source files in RAM, then erase and program the raw kernel/DTB MTDs.
+FBK: ucp pub/kernel/Image t:/tmp/gar-Image
+FBK: ucp pub/kernel/@@DTB@@ t:/tmp/gar-board.dtb
+FBK: ucp pub/rootfs/rootfs.squashfs t:/tmp/gar-rootfs.squashfs
+FBK: ucp pub/rootfs/usr.local.tar.bz2 t:/tmp/gar-usr.local.tar.bz2
+FBK: ucmd flash_erase /dev/mtd@@KERNEL_MTD@@ 0 0
+FBK: ucmd nandwrite -p /dev/mtd@@KERNEL_MTD@@ /tmp/gar-Image
+FBK: ucmd flash_erase /dev/mtd@@DTB_MTD@@ 0 0
+FBK: ucmd nandwrite -p /dev/mtd@@DTB_MTD@@ /tmp/gar-board.dtb
+
+# Build writable UBIFS in the remaining NAND partition. The Product rootfs
+# stays squashfs in the artifact and is expanded by the manufacturing Linux.
+FBK: ucmd ubidetach /dev/ubi_ctrl -m @@ROOTFS_MTD@@ || true
+FBK: ucmd ubiformat /dev/mtd@@ROOTFS_MTD@@ -y
+FBK: ucmd ubiattach /dev/ubi_ctrl -m @@ROOTFS_MTD@@
+FBK: ucmd ubimkvol /dev/ubi0 -N rootfs -m
+FBK: ucmd mkdir -p /mnt/gar-source /mnt/gar-rootfs
+FBK: ucmd mount -t squashfs -o loop,ro /tmp/gar-rootfs.squashfs /mnt/gar-source
+FBK: ucmd mount -t ubifs ubi0:rootfs /mnt/gar-rootfs
+FBK: ucmd cp -a /mnt/gar-source/. /mnt/gar-rootfs/
+FBK: ucmd tar -xojf /tmp/gar-usr.local.tar.bz2 -C /mnt/gar-rootfs
+# Build artifacts can carry the host build UID. tar -o avoids restoring it for
+# the overlay, while cp -a can still transfer it to the filesystem root itself.
+# Normalize / explicitly so systemd-tmpfiles accepts all path transitions.
+FBK: ucmd chown 0:0 /mnt/gar-rootfs
+FBK: ucmd chmod 0755 /mnt/gar-rootfs
+FBK: ucmd test "$(stat -c %u:%g /mnt/gar-rootfs)" = 0:0
+FBK: ucmd test "$(stat -c %a /mnt/gar-rootfs)" = 755
+FBK: ucmd test "$(stat -c %u:%g /mnt/gar-rootfs/usr/local)" = 0:0
+FBK: ucmd sync
+FBK: ucmd umount /mnt/gar-rootfs
+FBK: ucmd umount /mnt/gar-source
+FBK: ucmd ubidetach /dev/ubi_ctrl -m @@ROOTFS_MTD@@
+FBK: ucmd echo GAR_IMX91S_NAND_FLASH_COMPLETE

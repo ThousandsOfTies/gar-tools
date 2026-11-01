@@ -120,6 +120,16 @@ do_status() {
     unhealthy "$app is not running"
 }
 
+do_stop() {
+    require_deployed
+    clear_running_build
+    "$(init_script)" stop || unhealthy "$app failed to stop"
+    if is_running; then
+        unhealthy "$app is still running after stop"
+    fi
+    echo "$app is stopped"
+}
+
 do_log() {
     lines=$1
     require_deployed
@@ -185,6 +195,10 @@ case "$action" in
     status)
         [ "$#" -eq 2 ] || fail "usage: gar-target-lifecycle status APP"
         do_status
+        ;;
+    stop)
+        [ "$#" -eq 2 ] || fail "usage: gar-target-lifecycle stop APP"
+        do_stop
         ;;
     log)
         if [ "$#" -eq 2 ]; then

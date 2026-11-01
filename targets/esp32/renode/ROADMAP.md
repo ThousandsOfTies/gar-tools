@@ -181,10 +181,10 @@ Connect the Renode backend to GAR's existing target manifest and artifact flow.
 Desired command shape:
 
 ```bash
-gar sim app build
-gar sim app deploy
-gar sim runtime start
-gar sim runtime diag --json
+gar sim build app
+gar sim deploy app
+gar sim start runtime
+gar sim diag runtime --json
 ```
 
 Done when:
