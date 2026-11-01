@@ -71,3 +71,35 @@ command intentionally rejects MCU profiles. Core Target Pack transport and
 deployment contracts are unchanged.
 
 Validate with `python3 -m unittest discover -s tests -p test_embedded_composition.py -v`.
+
+## Interpreted Linux applications and planned ports
+
+`build.backend: python` selects application/tool payload files and checks Python
+syntax without importing device libraries. `launch.runtime` selects an interpreter
+from the board profile. The Product owns launch defaults and an explicit mapping
+from GPIO/SPI/I2C CSV fields to its application's environment variable names.
+The library contains no board, application, GPIO number or camera-mode defaults.
+
+The `environment --environment physical|simulation` command resolves those values;
+`--format systemd` renders environment assignments for an existing Product service.
+Simulation values come from the same canonical CSV plus declared overrides.
+Generated launchers preserve values supplied at runtime, including existing GAR
+persistent/system environment files. Payloads contain only selected sources.
+
+For `deployment.manager: gar-target`, packages retain the constrained GAR layout:
+one app directory under the board's application root, a generated `run`, and
+composition provenance. Root-owned preparation, service installation and lifecycle
+stay with GAR; no second startup manager is added. The legacy Target discovery and
+transport contracts are not moved by this library.
+
+`package --output artifacts/a-new-release` is immutable by default. Existing build
+hooks may explicitly select `--replace` for their generated staging directory.
+`clean --output artifacts/from-codespace` can remove only a generated child of the
+Product's artifacts directory; linked paths are rejected before a move or cleanup.
+
+`build.backend: planned` requires `status: planned` and an explanation. Such a
+Product can describe and validate its selected resources, including I2C, while
+build/package still fail. Adding a board component never qualifies an unfinished
+physical port or creates an artificial successful artifact.
+
+Validation: `python3 -m unittest discover -s tests -p test_python_composition.py -v`.

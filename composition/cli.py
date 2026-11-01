@@ -17,12 +17,20 @@ def main():
     commands.add_parser("describe")
     commands.add_parser("validate")
     commands.add_parser("prepare")
+    component = commands.add_parser("component")
+    component.add_argument("role", choices=["application", "tools", "board"])
     hardware = commands.add_parser("hardware")
     hardware.add_argument("--environment", choices=["physical", "simulation"], default="simulation")
+    environment = commands.add_parser("environment")
+    environment.add_argument("--environment", choices=["physical", "simulation"], default="physical")
+    environment.add_argument("--format", choices=["json", "systemd"], default="json")
     build = commands.add_parser("build")
     build.add_argument("--native", action="store_true")
     package = commands.add_parser("package")
     package.add_argument("--output", default="artifacts/board-composition-target")
+    package.add_argument("--replace", action="store_true", help="Replace generated Python staging output")
+    clean = commands.add_parser("clean")
+    clean.add_argument("--output", default="artifacts/from-codespace")
     args = parser.parse_args()
     product = Product(args.root).validate()
     if args.action in ("describe", "validate"):
@@ -31,18 +39,44 @@ def main():
         print(product.build(native=args.native))
     elif args.action == "prepare":
         print(product.prepare())
+    elif args.action == "component":
+        print(product.components[args.role])
     elif args.action == "hardware":
         print(product.hardware_for(args.environment))
+    elif args.action == "environment":
+        if product.data['build'].get('backend') != 'python':
+            raise ValueError('Environment rendering requires a declared Python launch configuration')
+        from python_app import environment
+        values = environment(product, args.environment)
+        if args.format == 'json':
+            print(json.dumps(values, indent=2))
+        else:
+            for key, value in values.items():
+                assignment = (key + '=' + value).replace('%', '%%')
+                if any(character.isspace() or character in '\\"' for character in assignment):
+                    assignment = json.dumps(assignment)
+                print('Environment=' + assignment)
     elif args.action == "package":
+        if product.data['build'].get('backend') in ('python', 'planned'):
+            from python_app import package
+            print(package(product, args.output, replace=args.replace))
+            return
+        if args.replace:
+            raise ValueError('Replacing immutable native packages is not supported')
         if product.kind != "linux":
             raise ValueError("Use the Product target artifact hook for firmware packaging")
         from package import package_product
         print(package_product(product, args.output))
+    elif args.action == "clean":
+        if product.data['build'].get('backend') != 'python':
+            raise ValueError('Generated package cleaning requires the Python backend')
+        from python_app import clean
+        clean(product, args.output)
 
 
 if __name__ == "__main__":
     try:
         main()
-    except (ValueError, KeyError, OSError) as error:
+    except (ValueError, KeyError, OSError, SyntaxError) as error:
         print(f"Composition error: {error}", file=sys.stderr)
         raise SystemExit(2) from error
