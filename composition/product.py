@@ -53,11 +53,21 @@ class Product:
         self.profile = read_json(self.profile_path)
         if self.profile.get("schema_version") != 1 or self.profile["board"] != self.board["id"]:
             raise ValueError("Board/profile identity mismatch")
-        self.hardware = inside(self.root, self.data["hardware"]["physical"])
-        self.gpio = csv_rows(self.hardware / "gpio.csv")
-        self.spi = csv_rows(self.hardware / "spi.csv")
+        self.kind = self.profile.get("kind", "linux")
+        if self.kind == "platformio":
+            self.hardware = inside(self.root, self.data["hardware"]["binding"]).parent
+            self.gpio, self.spi = [], []
+        elif self.kind == "linux":
+            self.hardware = inside(self.root, self.data["hardware"]["physical"])
+            self.gpio = csv_rows(self.hardware / "gpio.csv")
+            self.spi = csv_rows(self.hardware / "spi.csv")
+        else:
+            raise ValueError(f"Unsupported board profile kind: {self.kind}")
 
     def validate(self):
+        if self.kind == "platformio":
+            from embedded import validate
+            return validate(self)
         gpio = {item["device"]: item for item in self.profile["gpio"]}
         used = set()
         for row in self.gpio:
@@ -116,13 +126,25 @@ class Product:
             components[key] = {"path": self.data["components"][key],
                                "commit": result.stdout.strip() if result.returncode == 0 else "unknown",
                                "dirty": bool(status.stdout.strip()) if status.returncode == 0 else None}
+        validated = ({"display": self.binding["display"], "buttons": self.binding["buttons"]}
+                     if self.kind == "platformio" else {"gpio_lines": len(self.gpio), "spi_devices": len(self.spi)})
         return {"product": self.id, "components": components, "board": self.board["id"],
                 "profile": self.data["board_profile"], "os": self.profile["os"],
                 "architecture": self.profile["architecture"], "init": self.profile["startup"]["init"],
                 "hardware": self.data["hardware"], "launch": self.data["launch"],
-                "validated": {"gpio_lines": len(self.gpio), "spi_devices": len(self.spi)}}
+                "validated": validated}
+
+    def prepare(self):
+        if self.kind != "platformio":
+            raise ValueError("Preparation files are only needed for PlatformIO profiles")
+        from embedded import prepare
+        return prepare(self)
 
     def hardware_for(self, environment):
+        if self.kind == "platformio":
+            if environment not in ("physical", "simulation"):
+                raise ValueError(f"Unknown hardware environment: {environment}")
+            return self.hardware
         if environment == "physical":
             return self.hardware
         if environment != "simulation":
@@ -141,6 +163,11 @@ class Product:
 
     def build(self, *, native=False):
         self.validate()
+        if self.kind == "platformio":
+            if native:
+                raise ValueError("Use the Product simulator hook for host application builds")
+            from embedded import build
+            return build(self)
         output = inside(self.root, self.data["build"]["directory"], exists=False)
         output.mkdir(parents=True, exist_ok=True)
         env = os.environ.copy()

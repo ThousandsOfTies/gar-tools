@@ -16,6 +16,7 @@ def main():
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("describe")
     commands.add_parser("validate")
+    commands.add_parser("prepare")
     hardware = commands.add_parser("hardware")
     hardware.add_argument("--environment", choices=["physical", "simulation"], default="simulation")
     build = commands.add_parser("build")
@@ -28,9 +29,13 @@ def main():
         print(json.dumps(product.describe(), ensure_ascii=False, indent=2))
     elif args.action == "build":
         print(product.build(native=args.native))
+    elif args.action == "prepare":
+        print(product.prepare())
     elif args.action == "hardware":
         print(product.hardware_for(args.environment))
     elif args.action == "package":
+        if product.kind != "linux":
+            raise ValueError("Use the Product target artifact hook for firmware packaging")
         from package import package_product
         print(package_product(product, args.output))
 
