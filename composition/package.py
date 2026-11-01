@@ -171,6 +171,9 @@ def verify_binaries(product):
 
 def package_product(product, output):
     product.validate()
+    if product.data['build'].get('backend') in ('python', 'planned'):
+        from python_app import package
+        return package(product, output)
     binaries = verify_binaries(product)
     destination = inside(product.root, output, exists=False)
     if not any(parent.name in ("artifacts", "build") for parent in (destination, *destination.parents)

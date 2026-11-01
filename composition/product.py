@@ -61,6 +61,7 @@ class Product:
             self.hardware = inside(self.root, self.data["hardware"]["physical"])
             self.gpio = csv_rows(self.hardware / "gpio.csv")
             self.spi = csv_rows(self.hardware / "spi.csv")
+            self.i2c = csv_rows(self.hardware / "i2c.csv") if (self.hardware / "i2c.csv").is_file() else []
         else:
             raise ValueError(f"Unsupported board profile kind: {self.kind}")
 
@@ -94,6 +95,19 @@ class Product:
                 raise ValueError("SPI mode/speed exceeds board capability")
         if self.profile["startup"]["init"] not in ("busybox", "systemd"):
             raise ValueError("Unsupported init system")
+        i2c = {item['device']: item for item in self.profile.get('i2c', [])}
+        used_i2c = set()
+        for row in self.i2c:
+            resource = i2c.get(row['dev'])
+            if not resource or int(row['bus']) != resource['bus'] or not 3 <= int(row['address'], 0) <= 0x77:
+                raise ValueError('I2C device/bus/address is outside the selected board profile')
+            key = row['dev'], int(row['address'], 0)
+            if key in used_i2c:
+                raise ValueError('Duplicate I2C device address')
+            used_i2c.add(key)
+        if self.data['build'].get('backend') in ('python', 'planned'):
+            from python_app import validate
+            return validate(self)
         for item in self.data["payload"]:
             inside(self.root, item)
         inside(self.components["application"], self.data["build"]["script"])
@@ -128,11 +142,13 @@ class Product:
                                "dirty": bool(status.stdout.strip()) if status.returncode == 0 else None}
         validated = ({"display": self.binding["display"], "buttons": self.binding["buttons"]}
                      if self.kind == "platformio" else {"gpio_lines": len(self.gpio), "spi_devices": len(self.spi)})
+        if self.kind == 'linux' and self.i2c:
+            validated['i2c_devices'] = len(self.i2c)
         return {"product": self.id, "components": components, "board": self.board["id"],
                 "profile": self.data["board_profile"], "os": self.profile["os"],
                 "architecture": self.profile["architecture"], "init": self.profile["startup"]["init"],
                 "hardware": self.data["hardware"], "launch": self.data["launch"],
-                "validated": validated}
+                "status": self.data.get("status", "ready"), "validated": validated}
 
     def prepare(self):
         if self.kind != "platformio":
@@ -163,6 +179,11 @@ class Product:
 
     def build(self, *, native=False):
         self.validate()
+        if self.data['build'].get('backend') in ('python', 'planned'):
+            if native:
+                raise ValueError('Declared application builds do not use --native')
+            from python_app import build
+            return build(self)
         if self.kind == "platformio":
             if native:
                 raise ValueError("Use the Product simulator hook for host application builds")
