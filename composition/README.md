@@ -71,3 +71,8 @@ command intentionally rejects MCU profiles. Core Target Pack transport and
 deployment contracts are unchanged.
 
 Validate with `python3 -m unittest discover -s tests -p test_embedded_composition.py -v`.
+
+On Windows, default embedded build caches use a short per-Product/platform path
+under `%USERPROFILE%/.cache/gar/` to keep GCC expanded commands below the process
+command-line limit. The isolated Python runtime stays inside the Product.
+`GAR_BUILD_CACHE` still overrides the location; choose a short absolute path.

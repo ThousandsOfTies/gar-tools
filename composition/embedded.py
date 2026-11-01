@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import configparser
+import hashlib
 import json
 import os
 import platform
@@ -126,7 +127,13 @@ def runtime_paths(root, version):
         cache = base / "target-build" / tag
     else:
         runtime = root / ".gar/target-build-tools" / f"{tag}-pio-{version}"
-        cache = root / ".cache/gar-target-build" / tag
+        if os.name == "nt":
+            # GCC expands response files before spawning cc1plus. Deep ESP-IDF
+            # include paths can exceed Windows' process command-line limit.
+            identity = hashlib.sha256((str(root.resolve()).casefold()+":"+tag).encode()).hexdigest()[:8]
+            cache = Path.home() / ".cache/gar" / identity
+        else:
+            cache = root / ".cache/gar-target-build" / tag
     python = runtime / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     env = dict(os.environ, PLATFORMIO_CORE_DIR=str(cache / "core"),
                PLATFORMIO_BUILD_DIR=str(cache / "build"), PLATFORMIO_LIBDEPS_DIR=str(cache / "libdeps"))

@@ -1,6 +1,6 @@
 import { GarStickCPlus2 } from './m5stickc-plus2.mjs';
 
-/** StickS3 K150 shell: two application keys, reset is a separate hardware event.
+/** StickS3 K150 shell: two application keys; reset is not an application input.
  * Reuses the Stick family's contact/cancellation contract, not Product behavior.
  */
 export class GarStickS3 extends GarStickCPlus2 {
@@ -20,7 +20,6 @@ export class GarStickS3 extends GarStickCPlus2 {
       .a::before{content:'';position:absolute;inset:-10px;border-radius:inherit}
       .a[aria-pressed=true]{filter:brightness(.85);transform:translateY(1px);box-shadow:inset 0 1px 3px #005d7e,0 0 0 3px #111a}
       .pins{background:repeating-linear-gradient(90deg,#292c29 0 5px,#b2a075 5px 7px)}
-      .reset{left:-12px;top:20%;width:12px;height:12%;border-radius:3px}
       .mark{position:absolute;bottom:2%;left:25%;font:8px system-ui;letter-spacing:1px;color:#adb5ba}
       :host([orientation=portrait]) .a{right:24%;top:auto;bottom:18%;width:52%;height:4.5%;
         background:linear-gradient(#5cdefa,#0abced 48%,#009fd1);box-shadow:inset 0 2px 2px #8aeaff,0 0 0 3px #111a,0 3px 3px #0009}
