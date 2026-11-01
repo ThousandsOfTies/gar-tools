@@ -16,6 +16,8 @@ def main():
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("describe")
     commands.add_parser("validate")
+    hardware = commands.add_parser("hardware")
+    hardware.add_argument("--environment", choices=["physical", "simulation"], default="simulation")
     build = commands.add_parser("build")
     build.add_argument("--native", action="store_true")
     package = commands.add_parser("package")
@@ -26,6 +28,8 @@ def main():
         print(json.dumps(product.describe(), ensure_ascii=False, indent=2))
     elif args.action == "build":
         print(product.build(native=args.native))
+    elif args.action == "hardware":
+        print(product.hardware_for(args.environment))
     elif args.action == "package":
         from package import package_product
         print(package_product(product, args.output))

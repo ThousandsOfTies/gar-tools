@@ -12,7 +12,13 @@ from unittest.mock import Mock, patch
 TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS / "composition"))
 from device import Device
-from package import configure_script, install_script, launch_script, package_product, render_service
+from package import (
+    configure_script,
+    install_script,
+    launch_script,
+    package_product,
+    render_service,
+)
 from product import Product, inside
 
 
@@ -73,6 +79,20 @@ class CompositionTests(unittest.TestCase):
         self.save("sources/board/profiles/os.json", self.profile)
         with self.assertRaisesRegex(ValueError, "speed"):
             Product(self.root).validate()
+
+    def test_environment_resolution_preserves_legacy_profiles_and_protects_authored_input(self):
+        product = Product(self.root).validate()
+        self.assertEqual((self.root / "hardware/real").resolve(), product.hardware_for("physical"))
+        legacy = self.root / "hardware/sim"
+        legacy.mkdir()
+        self.assertEqual(legacy.resolve(), product.hardware_for("simulation"))
+        self.save("overrides.csv", "table,name,field,value\ngpio,knob,debounce_us,0\n")
+        product.data["hardware"].update(simulation_overrides="overrides.csv", simulation="hardware/real")
+        with self.assertRaisesRegex(ValueError, "Generated simulation"):
+            product.hardware_for("simulation")
+        product.data["hardware"]["simulation"] = ".gar/hardware/sim"
+        generated = product.hardware_for("simulation")
+        self.assertEqual("0", (generated / "gpio.csv").read_text().splitlines()[1].split(",")[-1])
 
     def test_board_selects_boot_mechanism_product_selects_entry_and_speed(self):
         product = Product(self.root).validate()
