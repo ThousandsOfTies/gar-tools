@@ -126,6 +126,8 @@ window.addEventListener('pagehide', () => ui.destroy());
 音量設定の異なる2個を、AppやGemini接続なしで操作できます。
 localhost/HTTPSとブラウザのマイク許可が必要です。入力PCMは16kHz、再生は指定された
 sampleRate（通常24kHz）で、ミュート・音量・再生状態はインスタンスごとに独立します。
+生成が実際の再生より速く進む場合は順番に再生します。再生待ちは最大60秒分に制限し、
+割り込み・停止時は未再生分を破棄します。通常の文章を4秒分受信しただけでは停止しません。
 マイクは明示的なstartでのみ開始し、stop・切断時にtrackとAudioContextを解放します。
 GeminiLiveはAPIキーを保存・ログ出力せず、callerが接続時だけ渡します。
 App側が意味を持つtool名・引数を検査し、Promiseで実行結果を返してください。

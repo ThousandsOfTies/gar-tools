@@ -52,14 +52,16 @@ export class GarSpeakerphone extends HTMLElement{
     if(!Number.isInteger(sampleRate)||sampleRate<8000||sampleRate>48000)throw new Error('Invalid playback rate');
     const values=samples16(bytes);if(!values.length)return;
     const context=this.context,start=Math.max(context.currentTime+.025,this.nextTime||0);
-    if(start-context.currentTime+values.length/sampleRate>4)throw new Error('再生音声が遅延しています。接続し直してください');
+    // Live providers can generate faster than playback. Bound memory without
+    // treating an ordinary sentence arriving ahead of playback as a failure.
+    if(start-context.currentTime+values.length/sampleRate>60)throw new Error('再生待ち音声が60秒を超えました。接続し直してください');
     const buffer=context.createBuffer(1,values.length,sampleRate);buffer.getChannelData(0).set(values);
     const source=context.createBufferSource();source.buffer=buffer;source.connect(this.gain);this.sources.add(source);
-    source.onended=()=>{this.sources.delete(source);if(!this.sources.size)this.setPlaying(false);};
+    source.onended=()=>{source.disconnect();this.sources.delete(source);if(!this.sources.size)this.setPlaying(false);};
     source.start(start);this.nextTime=start+buffer.duration;this.setPlaying(true);
   }
   setPlaying(value){if(this.playing===value)return;this.playing=value;this.toggleAttribute('playing',value);this.emit('gar-audio-playback',{playing:value});}
-  stopPlayback(){for(const source of this.sources){source.onended=null;try{source.stop();}catch{}}this.sources.clear();this.nextTime=0;this.setPlaying(false);}
+  stopPlayback(){for(const source of this.sources){source.onended=null;try{source.stop();}catch{}source.disconnect();}this.sources.clear();this.nextTime=0;this.setPlaying(false);}
   async stop(){
     ++this.generation;this.starting=false;this.active=false;this.stopPlayback();
     this.capture?.disconnect();this.source?.disconnect();this.silence?.disconnect();this.gain?.disconnect();
