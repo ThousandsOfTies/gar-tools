@@ -46,3 +46,7 @@ test('two protocol instances keep connection state independent and sanitize erro
   first.socket.receive({error:{message:'fake-test-key must never be displayed'}});await settle();
   assert.ok(!error.includes('fake-test-key'));assert.equal(first.client.ready,false);assert.equal(second.client.ready,true);second.client.stop();
 });
+test('socket constructor errors cannot expose a credential-bearing URL',()=>{
+  const client=new GeminiLive({socketFactory:url=>{throw new Error(url);}});
+  assert.throws(()=>client.connect({apiKey:'never-display-this',model:'test-model',voice:'Puck',instruction:'test'}),error=>!error.message.includes('never-display-this')&&error.message.includes('Cannot open'));
+});

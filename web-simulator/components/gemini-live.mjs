@@ -10,7 +10,10 @@ export class GeminiLive extends EventTarget{
     if(!/^[\w.-]{1,100}$/.test(model)||!/^[\w.-]{1,40}$/.test(voice))throw new Error('Invalid model or voice');
     const generation=++this.generation,setup={model:`models/${model}`,generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}},systemInstruction:{parts:[{text:instruction}]},tools:[{functionDeclarations:tools}],inputAudioTranscription:{},outputAudioTranscription:{}};
     this.allowed=new Set(tools.map(tool=>tool.name));this.calls.clear();this.ready=false;
-    const socket=this.factory(endpoint+'?key='+encodeURIComponent(apiKey.trim()));this.socket=socket;
+    let socket;
+    try{socket=this.factory(endpoint+'?key='+encodeURIComponent(apiKey.trim()));}
+    catch{throw new Error('Cannot open the Gemini connection. Check browser network access.');}
+    this.socket=socket;
     this.emit('state','connecting');
     const ready=new Promise((resolve,reject)=>{this.resolve=resolve;this.reject=reject;});
     this.timer=setTimeout(()=>this.fail('Gemini connection timed out'),15000);
