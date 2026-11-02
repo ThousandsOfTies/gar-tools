@@ -25,4 +25,16 @@ Independent tests (no ALSA device required):
 
 ```sh
 node --test targets/linux-device/runtime/alsa-audio/audio.test.cjs
+node --test targets/linux-device/runtime/alsa-audio/duplex.test.cjs
 ```
+
+`duplex.cjs` provides continuous raw PCM via `AlsaDuplex`: `start()` captures
+16 kHz mono S16_LE in aligned 100 ms `input` events, while `playPcm(bytes)` streams
+24 kHz mono S16_LE to aplay. Call `endTurn()` on generation completion; `playback`
+stays true until the aplay process drains and exits. `stopPlayback()` drops the
+old queue and terminates playback before a later turn starts. `close()` stops
+both children, escalating TERM to KILL if necessary. Queues are bounded to 60
+seconds of raw output. `failure` reports unplug/process errors. No shell,
+temporary audio file, default-device fallback, cloud transport, VAD or automatic
+recording is implemented here. The caller explicitly starts capture and owns
+echo policy, mute, provider credentials and session lifetime.
