@@ -41,6 +41,9 @@ PWMサンプルは独立した2つのPCA9685・サーボを並べ、Product固�
 | `rotary.mjs` / `<gar-rotary>` | 回転・押下を`gar-rotary-input`で通知し、`.value`でカウンタ表示を更新。通信は行わない。 |
 | `json-transport.mjs` / `JsonTransport` | `{url}`を注入し、`connect()`、`send(message)`、`close()`でJSON通信。`message`と`connection`を通知し、Productのメッセージ解釈は行わない。 |
 | `camera-input.mjs` / `<gar-camera-input>` | カメラ選択、映像プレビュー、JPEG WebSocket送信。`endpoint`で送信先を注入。 |
+| `speakerphone.mjs` / `<gar-speakerphone>` | PCのマイク・スピーカーでUSB音声機器を代替。`start()` / `stop()`、`playPcm()` / `stopPlayback()`。`label`, `device-id`, `volume`を注入し、`gar-audio-input`, `gar-audio-playback`, `gar-audio-mute`, `gar-audio-state`, `gar-audio-error`を通知。通信・Appの意味を持たない。 |
+| `audio-pcm.mjs`, `audio-capture-worklet.js` | PCM16 little-endian変換、Base64、マイク入力のAudioWorklet。 |
+| `gemini-live.mjs` / `GeminiLive` | DOM非依存のGemini Live接続。モデル・声・指示・ツールと実行adapterを注入。音声、文字起こし、割り込み、取消とツール応答を受け渡す。 |
 | `pca9685.js`, `sg90.js` | 任意の接続先・アドレス・校正を渡すPWM/サーボ表示。内部DOMとCSSはShadow DOMに閉じます。 |
 | `gamepad.js` | ゲームパッド入力を通知。ロボットの動作への割当はProduct側。 |
 | `telemetry-transport.mjs` | ローカルデモと読み取り専用WebSocket telemetry。初期状態と受信データの解釈を注入。 |
@@ -118,6 +121,14 @@ window.addEventListener('pagehide', () => ui.destroy());
 
 開発中の変更は各Productの`sources/gar-tools`作業ツリーにも反映しています。
 配布時はgar-toolsを先にcommit/pushしてからProductのsubmodule参照を更新します。
+
+音声部品の単独例は `python web-simulator/serve.py --panel web-simulator/examples/audio-parts`。
+音量設定の異なる2個を、AppやGemini接続なしで操作できます。
+localhost/HTTPSとブラウザのマイク許可が必要です。入力PCMは16kHz、再生は指定された
+sampleRate（通常24kHz）で、ミュート・音量・再生状態はインスタンスごとに独立します。
+マイクは明示的なstartでのみ開始し、stop・切断時にtrackとAudioContextを解放します。
+GeminiLiveはAPIキーを保存・ログ出力せず、callerが接続時だけ渡します。
+App側が意味を持つtool名・引数を検査し、Promiseで実行結果を返してください。
 
 ## 確認
 
