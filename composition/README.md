@@ -5,6 +5,15 @@ Its `product.json` selects those inputs, an OS profile, hardware CSVs, applicati
 build/launch declarations and the runtime version. No board model, SDK layout,
 pin number or init-system rule is hard-coded in the Product hooks.
 
+Optional Linux I2C CSVs are checked against the board resource inventory and
+included in readiness/preflight and udev access rules. An Armbian profile may
+declare `preparation.resource_overlays` with `device`, `overlay` and `name`;
+only resources selected by the Product load those extra overlays. Multiple
+overlays are checked together before boot configuration is updated.
+Products can declare bounded `build.environment` options, supplementary groups
+and a systemd runtime directory. Toolchain/root variables cannot be overridden
+through build options. Missing optional declarations preserve existing behavior.
+
 ```sh
 python3 tools/product.py describe
 python3 tools/product.py validate

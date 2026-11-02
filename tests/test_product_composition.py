@@ -103,6 +103,43 @@ class CompositionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "architecture"):
             package_product(Product(self.root), "artifacts/wrong")
 
+    def test_optional_i2c_is_validated_and_board_overlay_is_packaged(self):
+        self.profile["i2c"] = [{"device": "/dev/i2c-2", "bus": 2}]
+        self.profile["preparation"] = {"kind": "armbian-overlay", "overlay": "assets/spi.dts", "name": "generic-spi",
+                                       "boot_config": "/boot/armbianEnv.txt", "resource_overlays": [
+                                           {"device": "/dev/i2c-2", "overlay": "assets/i2c.dts", "name": "generic-i2c"}]}
+        self.save("sources/board/profiles/os.json", self.profile)
+        self.save("sources/board/assets/spi.dts", "/dts-v1/;")
+        self.save("sources/board/assets/i2c.dts", "/dts-v1/;")
+        self.save("hardware/real/i2c.csv", "name,bus,dev,address\ncontroller,2,/dev/i2c-2,0x40\n")
+        self.target_binary()
+        product = Product(self.root).validate()
+        self.assertIn("generic-i2c.dtbo", configure_script(product))
+        output = package_product(product, "artifacts/i2c")
+        self.assertTrue((output / "files/app/.board/assets/i2c.dts").is_file())
+        self.assertIn('KERNEL=="i2c-2", GROUP="i2c"', (output / "files/app/.startup/devices.rules").read_text())
+        self.save("hardware/real/i2c.csv", "name,bus,dev,address\ncontroller,99,/dev/i2c-2,0x40\n")
+        with self.assertRaisesRegex(ValueError, "I2C"):
+            Product(self.root).validate()
+
+    def test_declared_build_options_and_systemd_groups_are_bounded(self):
+        self.data["build"]["environment"] = {"GAR_OPTION": "1"}
+        self.save("product.json", self.data)
+        Product(self.root).validate()
+        self.data["build"]["environment"] = {"CC": "untrusted"}
+        self.save("product.json", self.data)
+        with self.assertRaisesRegex(ValueError, "reserved"):
+            Product(self.root).validate()
+        self.data["build"].pop("environment")
+        self.profile["startup"] = {"init": "systemd", "after": "systemd-udev-trigger.service", "device_wait_seconds": 15}
+        self.save("sources/board/profiles/os.json", self.profile)
+        self.data["deployment"].update(runtime_directory="generic-runtime", supplementary_groups=["i2c", "audio"])
+        self.save("product.json", self.data)
+        product = Product(self.root).validate()
+        service = render_service(product)[1]
+        self.assertIn("RuntimeDirectory=generic-runtime", service)
+        self.assertIn("SupplementaryGroups=audio gpio i2c spi", service)
+
     def test_bundle_pins_all_components_and_keeps_sdk_bytes_external(self):
         self.target_binary()
         destination = package_product(Product(self.root), "artifacts/target")

@@ -56,6 +56,7 @@ class Product:
         self.hardware = inside(self.root, self.data["hardware"]["physical"])
         self.gpio = csv_rows(self.hardware / "gpio.csv")
         self.spi = csv_rows(self.hardware / "spi.csv")
+        self.i2c = csv_rows(self.hardware / "i2c.csv") if (self.hardware / "i2c.csv").is_file() else []
 
     def validate(self):
         gpio = {item["device"]: item for item in self.profile["gpio"]}
@@ -84,6 +85,25 @@ class Product:
                 raise ValueError("SPI mode/speed exceeds board capability")
         if self.profile["startup"]["init"] not in ("busybox", "systemd"):
             raise ValueError("Unsupported init system")
+        resources = {item["device"]: item for item in self.profile.get("i2c", [])}
+        used_i2c = set()
+        for row in self.i2c:
+            resource = resources.get(row["dev"])
+            key = row["dev"], int(row["address"], 0)
+            if not resource or int(row["bus"]) != resource["bus"] or not 3 <= key[1] <= 0x77 or key in used_i2c:
+                raise ValueError("I2C binding is outside board resources or duplicated")
+            used_i2c.add(key)
+        for name, value in self.data["build"].get("environment", {}).items():
+            if not re.fullmatch(r"[A-Z][A-Z0-9_]*", name) or name in ("CC", "CXX", "GAR_TOOLS_ROOT", "GAR_BUILD_DIR") or not isinstance(value, str) or any(c in value for c in "\0\r\n"):
+                raise ValueError("Invalid or reserved build environment assignment")
+        for group in self.data["deployment"].get("supplementary_groups", []):
+            if not re.fullmatch(r"[a-z][a-z0-9_-]*", group):
+                raise ValueError("Invalid supplementary group")
+        directory = self.data["deployment"].get("runtime_directory")
+        if directory and not re.fullmatch(r"[a-z][a-z0-9-]*", directory):
+            raise ValueError("Invalid runtime directory")
+        if directory and self.profile["startup"]["init"] != "systemd":
+            raise ValueError("RuntimeDirectory requires a systemd board profile")
         for item in self.data["payload"]:
             inside(self.root, item)
         inside(self.components["application"], self.data["build"]["script"])
@@ -127,6 +147,7 @@ class Product:
         output = inside(self.root, self.data["build"]["directory"], exists=False)
         output.mkdir(parents=True, exist_ok=True)
         env = os.environ.copy()
+        env.update(self.data["build"].get("environment", {}))
         env.update(GAR_TOOLS_ROOT=str(self.components["tools"]), GAR_BUILD_DIR=str(output))
         if native:
             env.update(CC=env.get("CC", "gcc"), CXX=env.get("CXX", "g++"))

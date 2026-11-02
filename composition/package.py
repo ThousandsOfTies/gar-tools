@@ -35,6 +35,18 @@ def identity_script(profile):
     return "\n".join(lines) + "\n"
 
 
+def board_overlays(product):
+    preparation = product.profile["preparation"]
+    selected = [{"overlay": preparation["overlay"], "name": preparation["name"]}] if preparation.get("overlay") else []
+    devices = {row["dev"] for row in getattr(product, "i2c", [])}
+    selected += [item for item in preparation.get("resource_overlays", []) if item["device"] in devices]
+    return selected
+
+
+def service_groups(product):
+    return sorted(set(["gpio", "spi", *product.data["deployment"].get("supplementary_groups", [])]))
+
+
 def configure_script(product):
     """Board-specific values enter through profile data; Product only selects SPI."""
     profile = product.profile
@@ -53,25 +65,33 @@ def configure_script(product):
                        "--speed", row["max_speed_hz"]]
             lines += [shlex.join(command), f'test -c {quote(row["dev"])}']
     elif preparation["kind"] == "armbian-overlay":
-        name = preparation["name"]
-        if not re.fullmatch(r"[a-z0-9-]+", name):
-            raise ValueError("Invalid overlay name")
+        selected = board_overlays(product)
         boot = preparation["boot_config"]
+        names = []
         lines += ['ROOT=$(CDPATH= cd -- "$(dirname "$0")" && pwd)',
                   "install -d -m 0755 /boot/overlay-user",
-                  f'dtc -@ -I dts -O dtb -o /boot/overlay-user/{name}.dtbo "$ROOT/.board/{preparation["overlay"]}"',
                   'staging=$(mktemp -d)', 'trap \'rm -f "$staging/base.dtb" "$staging/merged.dtb" "$staging/dtc.log"; rmdir "$staging"\' EXIT',
-                  'dtc -I fs -O dtb -o "$staging/base.dtb" /sys/firmware/devicetree/base 2>"$staging/dtc.log"',
-                  f'fdtoverlay -i "$staging/base.dtb" -o "$staging/merged.dtb" /boot/overlay-user/{name}.dtbo',
-                  f'test -e {quote(boot + ".gar-board-before")} || cp -p {quote(boot)} {quote(boot + ".gar-board-before")}',
+                  'dtc -I fs -O dtb -o "$staging/base.dtb" /sys/firmware/devicetree/base 2>"$staging/dtc.log"']
+        for item in selected:
+            name = item["name"]
+            if not re.fullmatch(r"[a-z0-9-]+", name):
+                raise ValueError("Invalid overlay name")
+            names.append(name)
+            lines += [f'dtc -@ -I dts -O dtb -o /boot/overlay-user/{name}.dtbo "$ROOT/.board/{item["overlay"]}"',
+                      f'fdtoverlay -i "$staging/base.dtb" -o "$staging/merged.dtb" /boot/overlay-user/{name}.dtbo',
+                      'cp "$staging/merged.dtb" "$staging/base.dtb"']
+        lines += [f'test -e {quote(boot + ".gar-board-before")} || cp -p {quote(boot)} {quote(boot + ".gar-board-before")}',
                   "python3 - <<'PY'", "from pathlib import Path", f"file=Path({boot!r})", "lines=file.read_text().splitlines()",
                   "indices=[i for i,line in enumerate(lines) if line.startswith('user_overlays=')]",
                   "if len(indices)>1: raise RuntimeError('Duplicate user_overlays entries')",
-                  "if indices:", "    index=indices[0]", "    values=lines[index].split('=',1)[1].split()",
-                  f"    if {name!r} not in values: values.append({name!r})", "    lines[index]='user_overlays='+' '.join(values)",
-                  f"else: lines.append('user_overlays={name}')", "file.write_text('\\n'.join(lines)+'\\n')", "PY"]
-        for row in product.spi:
+                  "index=indices[0] if indices else None",
+                  "values=lines[index].split('=',1)[1].split() if index is not None else []",
+                  f"for name in {names!r}:", "    if name not in values: values.append(name)",
+                  "if index is None: lines.append('user_overlays='+' '.join(values))",
+                  "else: lines[index]='user_overlays='+' '.join(values)", "file.write_text('\\n'.join(lines)+'\\n')", "PY"]
+        for row in [*product.spi, *getattr(product, "i2c", [])]:
             lines.append(f'test -c {quote(row["dev"])} || exit 10')
+
     else:
         raise ValueError("Unsupported board preparation provider")
     return "\n".join(lines) + "\n"
@@ -90,7 +110,7 @@ def launch_script(product):
         lines += [f'export GAR_BOARD_PROFILE={quote(app + "/.board/" + profile)}',
                   f'python3 {quote(app + "/.startup/preflight.py")}']
     lines += [f'test -x {quote(binary_dir + "/" + name)}' for name in product.data["build"]["outputs"]]
-    devices = sorted({row["chip"] for row in product.gpio} | {row["dev"] for row in product.spi})
+    devices = sorted({row["chip"] for row in product.gpio} | {row["dev"] for row in product.spi} | {row["dev"] for row in getattr(product, "i2c", [])})
     # One shared bounded readiness mechanism; board policy provides the deadline.
     lines += ["attempt=0", "while :; do", "  ready=1"]
     lines += [f'  test -c {quote(device)} || ready=0' for device in devices]
@@ -119,8 +139,10 @@ def render_service(product):
     template = template.replace("After=network-online.target", "After=" + startup["after"])
     template = template.replace("Wants=network-online.target\n", "")
     template = template.replace("User=gar", "User=" + user).replace("Group=gar", "Group=" + user)
-    template = template.replace("SupplementaryGroups=gpio spi video i2c", "SupplementaryGroups=gpio spi")
+    template = template.replace("SupplementaryGroups=gpio spi video i2c", "SupplementaryGroups=" + " ".join(service_groups(product)))
     template = template.replace("/opt/gar/apps/" + product.id, app)
+    if deployment.get("runtime_directory"):
+        template = template.replace("[Service]", "[Service]\nRuntimeDirectory=" + deployment["runtime_directory"] + "\nRuntimeDirectoryMode=0700")
     return product.id + ".service", template
 
 
@@ -136,6 +158,9 @@ def install_script(product, service_name):
                   f'/etc/init.d/{service_name} restart']
     else:
         user = product.data["deployment"]["user"]
+        for group in service_groups(product):
+            if group not in ("gpio", "spi"):
+                lines.append(f'getent group {quote(group)} >/dev/null || groupadd --system {quote(group)}')
         for legacy in product.data["deployment"].get("legacy_services", []):
             if not re.fullmatch(r"[a-zA-Z0-9_-]+\.service", legacy) or legacy == service_name:
                 raise ValueError("Invalid legacy service migration")
@@ -143,10 +168,10 @@ def install_script(product, service_name):
         lines += ["getent group gpio >/dev/null || groupadd --system gpio",
                   "getent group spi >/dev/null || groupadd --system spi",
                   f'id {quote(user)} >/dev/null 2>&1 || useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin {quote(user)}',
-                  f'usermod -a -G gpio,spi {quote(user)}',
+                  f'usermod -a -G {quote(",".join(service_groups(product)))} {quote(user)}',
                   f'install -m 0644 .startup/{service_name} /etc/systemd/system/{service_name}',
                   "install -m 0644 .startup/devices.rules /etc/udev/rules.d/70-" + product.id + ".rules",
-                  "udevadm control --reload-rules", "udevadm trigger --subsystem-match=gpio", "udevadm trigger --subsystem-match=spidev",
+                  "udevadm control --reload-rules", "udevadm trigger --subsystem-match=gpio", "udevadm trigger --subsystem-match=spidev", "udevadm trigger --subsystem-match=i2c-dev",
                   "systemctl daemon-reload", f'systemctl enable {service_name}',
                   f'if test "$configure_status" = 0; then systemctl restart {service_name}; else echo "Reboot required to enable board I/O"; fi']
     return "\n".join(lines) + "\n"
@@ -197,8 +222,8 @@ def package_product(product, output):
     profile_copy = board / product.board["profiles"][product.data["board_profile"]]
     profile_copy.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(product.profile_path, profile_copy)
-    overlay = product.profile["preparation"].get("overlay")
-    if overlay:
+    for item in board_overlays(product):
+        overlay = item["overlay"]
         source = inside(product.components["board"], overlay)
         (board / overlay).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, board / overlay)
@@ -214,6 +239,7 @@ def package_product(product, output):
     shutil.copyfile(product.components["tools"] / "composition/preflight.py", app / ".startup/preflight.py")
     devices = [(Path(row["chip"]).name, "gpio", "gpio") for row in product.gpio]
     devices += [(Path(row["dev"]).name, "spidev", "spi") for row in product.spi]
+    devices += [(Path(row["dev"]).name, "i2c-dev", "i2c") for row in getattr(product, "i2c", [])]
     rules = sorted({f'SUBSYSTEM=="{subsystem}", KERNEL=="{device}", GROUP="{group}", MODE="0660"'
                     for device, subsystem, group in devices})
     write(app / ".startup/devices.rules", "\n".join(rules) + "\n")
