@@ -5,10 +5,12 @@ const {deviceName}=require('./audio.cjs');
 
 /** Raw ALSA PCM streams. No cloud, application commands, credentials or files. */
 class AlsaDuplex extends EventEmitter{
-  constructor({capture,playback,playbackLeadInMs=0,spawnProcess=spawn}={}){
+  constructor({capture,playback,playbackLeadInMs=0,playbackCue=false,spawnProcess=spawn}={}){
     super();this.captureDevice=deviceName(capture);this.playbackDevice=deviceName(playback);this.spawnProcess=spawnProcess;
     if(!Number.isInteger(playbackLeadInMs)||playbackLeadInMs<0||playbackLeadInMs>1000)throw new Error('Playback lead-in must be 0..1000 milliseconds');
+    if(typeof playbackCue!=='boolean'||playbackCue&&playbackLeadInMs<120)throw new Error('Playback cue requires at least 120 ms of lead-in');
     this.playbackLeadInBytes=playbackLeadInMs*24*2; // 24kHz, mono PCM16.
+    this.playbackCue=playbackCue;
     this.turns=[];this.intake=null;this.pendingBytes=0;this.playing=false;this.closed=false;this.stopping=null;
   }
   child(command,args){
@@ -48,7 +50,19 @@ class AlsaDuplex extends EventEmitter{
     if(!this.intake){
       this.intake={queue:[],ended:false,writing:false,job:null};this.turns.push(this.intake);
       // Prime the playback path before speech; never trim or fade its first samples.
-      if(leadInBytes){this.intake.queue.push(Buffer.alloc(leadInBytes));this.pendingBytes+=leadInBytes;}
+      if(leadInBytes){
+        const prefix=Buffer.alloc(leadInBytes);
+        if(this.playbackCue){
+          // A quiet 80 ms cue, with a 5 ms attack and a decaying envelope.
+          // Peak is bounded to 5% of PCM full scale; remaining lead-in is silent.
+          const samples=24000*0.08;
+          for(let i=0;i<samples;i++){
+            const envelope=Math.min(1,i/120)*(1-i/(samples-1))**2;
+            prefix.writeInt16LE(Math.round(1638*envelope*Math.sin(2*Math.PI*660*i/24000)),i*2);
+          }
+        }
+        this.intake.queue.push(prefix);this.pendingBytes+=leadInBytes;
+      }
     }
     this.intake.queue.push(Buffer.from(bytes));this.pendingBytes+=bytes.length;this.pump();
   }

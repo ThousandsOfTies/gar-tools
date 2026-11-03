@@ -79,3 +79,16 @@ test('lead-in is bounded and counted toward the playback queue limit',async()=>{
   assert.throws(()=>audio.playPcm(new Uint8Array(24000*2*60)),/60 seconds/);
   assert.equal(fixture.calls.length,0);await audio.close();
 });
+
+test('an opt-in cue is quiet, ends before speech, and preserves every voice sample',async()=>{
+  const fixture=processes(),audio=new AlsaDuplex({capture:'mic',playback:'speaker',playbackLeadInMs:250,playbackCue:true,...fixture});
+  const speech=Buffer.from([10,11,12,13]);audio.playPcm(speech);audio.endTurn();
+  for(let i=0;i<8;i++)await settle();
+  const output=Buffer.concat(fixture.calls[0].child.bytes);
+  let peak=0;for(let i=0;i<3840;i+=2)peak=Math.max(peak,Math.abs(output.readInt16LE(i)));
+  assert.ok(peak>1000&&peak<=1638,'Cue must be nonzero and no louder than 5% of full scale');
+  assert.equal(output.readInt16LE(0),0);assert.equal(output.readInt16LE(3838),0);
+  assert.ok(output.subarray(3840,12000).every(value=>value===0),'Leave silent settling time after the cue');
+  assert.deepEqual(output.subarray(12000),speech);await audio.close();
+  assert.throws(()=>new AlsaDuplex({capture:'mic',playback:'speaker',playbackCue:true,...fixture}),/120 ms/);
+});
