@@ -1,17 +1,20 @@
 import {base64,unbase64} from './audio-pcm.mjs';
-const endpoint='wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
 /** Browser/Node-neutral Live protocol. App instructions and tool execution are injected. */
 export class GeminiLive extends EventTarget{
   constructor({socketFactory=url=>new WebSocket(url),onTool=async()=>{throw new Error('No tool adapter');}}={}){super();this.factory=socketFactory;this.onTool=onTool;this.generation=0;this.ready=false;this.calls=new Map();}
   emit(type,detail){const event=new Event(type);event.detail=detail;this.dispatchEvent(event);}
-  connect({apiKey,model,voice,instruction,tools=[]}){
+  connect({apiKey,ephemeralToken,apiVersion='v1beta',model,voice,instruction,tools=[]}){
     if(this.socket)throw new Error('Already connected');
-    if(typeof apiKey!=='string'||!apiKey.trim())throw new Error('API key is required');
+    const hasKey=typeof apiKey==='string'&&Boolean(apiKey.trim()),hasToken=typeof ephemeralToken==='string'&&ephemeralToken.startsWith('auth_tokens/');
+    if(hasKey===hasToken)throw new Error('Provide exactly one API key or ephemeral Live token');
+    if(!['v1alpha','v1beta'].includes(apiVersion))throw new Error('Invalid Live API version');
     if(!/^[\w.-]{1,100}$/.test(model)||!/^[\w.-]{1,40}$/.test(voice))throw new Error('Invalid model or voice');
     const generation=++this.generation,setup={model:`models/${model}`,generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}},systemInstruction:{parts:[{text:instruction}]},tools:[{functionDeclarations:tools}],inputAudioTranscription:{},outputAudioTranscription:{}};
     this.allowed=new Set(tools.map(tool=>tool.name));this.calls.clear();this.ready=false;
     let socket;
-    try{socket=this.factory(endpoint+'?key='+encodeURIComponent(apiKey.trim()));}
+    const method=hasToken?'BidiGenerateContentConstrained':'BidiGenerateContent';
+    const endpoint=`wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.${method}`;
+    try{socket=this.factory(endpoint+(hasToken?'?access_token=':'?key=')+encodeURIComponent(hasToken?ephemeralToken:apiKey.trim()));}
     catch{throw new Error('Cannot open the Gemini connection. Check browser network access.');}
     this.socket=socket;
     this.emit('state','connecting');

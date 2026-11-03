@@ -50,3 +50,13 @@ test('socket constructor errors cannot expose a credential-bearing URL',()=>{
   const client=new GeminiLive({socketFactory:url=>{throw new Error(url);}});
   assert.throws(()=>client.connect({apiKey:'never-display-this',model:'test-model',voice:'Puck',instruction:'test'}),error=>!error.message.includes('never-display-this')&&error.message.includes('Cannot open'));
 });
+
+test('ephemeral tokens use the constrained Live endpoint and remain out of errors',async()=>{
+  let url;const socket=new Socket(),client=new GeminiLive({socketFactory:value=>{url=value;return socket;}});
+  const ready=client.connect({ephemeralToken:'auth_tokens/test-only',apiVersion:'v1alpha',model:'gemini-3.8-live',voice:'Puck',instruction:'Test'});
+  assert.equal(new URL(url).pathname,'/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained');
+  assert.equal(new URL(url).searchParams.get('access_token'),'auth_tokens/test-only');
+  assert.equal(new URL(url).searchParams.has('key'),false);
+  socket.onopen();socket.receive({setupComplete:{}});await ready;client.stop();
+  assert.throws(()=>new GeminiLive().connect({apiKey:'one',ephemeralToken:'auth_tokens/two'}),/exactly one/);
+});
