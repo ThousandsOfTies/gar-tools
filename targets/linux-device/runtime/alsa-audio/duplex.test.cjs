@@ -52,3 +52,30 @@ test('successive turns keep separate playback children and preserve every PCM ch
   for(let i=0;i<6;i++)await settle();assert.equal(fixture.calls.length,2);assert.deepEqual([...Buffer.concat(fixture.calls[1].child.bytes)],[3,4]);
   fixture.calls[1].child.emit('close',0,null);await settle();assert.equal(audio.playing,false);await audio.close();
 });
+
+test('each new playback gets silence once, preserves speech samples, and cancels queued lead-in',async()=>{
+  const fixture=processes(),audio=new AlsaDuplex({capture:'mic',playback:'speaker',playbackLeadInMs:250,...fixture});
+  const first=Buffer.from([1,2,3,4]),next=Buffer.from([5,6]);
+  audio.playPcm(first);audio.playPcm(next);audio.endTurn();
+  for(let i=0;i<8;i++)await settle();
+  const player=fixture.calls[0],bytes=Buffer.concat(player.child.bytes);
+  assert.equal(bytes.length,12000+first.length+next.length);
+  assert.ok(bytes.subarray(0,12000).every(value=>value===0));
+  assert.deepEqual(bytes.subarray(12000),Buffer.concat([first,next]));
+  assert.equal(audio.pendingBytes,0);assert.equal(audio.playing,true);
+  player.child.emit('close',0,null);await settle();
+  audio.playPcm(next);audio.endTurn();for(let i=0;i<8;i++)await settle();
+  assert.deepEqual(Buffer.concat(fixture.calls[1].child.bytes),Buffer.concat([Buffer.alloc(12000),next]));
+  audio.playPcm(first);audio.endTurn();
+  await audio.stopPlayback();assert.equal(audio.pendingBytes,0);assert.equal(audio.turns.length,0);
+  assert.equal(fixture.calls.length,2,'A cancelled queued turn must not start its speaker process');
+  await audio.close();
+});
+
+test('lead-in is bounded and counted toward the playback queue limit',async()=>{
+  const fixture=processes();
+  for(const value of [-1,1001,1.5,NaN,Infinity,'250'])assert.throws(()=>new AlsaDuplex({capture:'mic',playback:'speaker',playbackLeadInMs:value,...fixture}),/lead-in/);
+  const audio=new AlsaDuplex({capture:'mic',playback:'speaker',playbackLeadInMs:250,...fixture});
+  assert.throws(()=>audio.playPcm(new Uint8Array(24000*2*60)),/60 seconds/);
+  assert.equal(fixture.calls.length,0);await audio.close();
+});

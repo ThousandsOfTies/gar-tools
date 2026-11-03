@@ -5,8 +5,10 @@ const {deviceName}=require('./audio.cjs');
 
 /** Raw ALSA PCM streams. No cloud, application commands, credentials or files. */
 class AlsaDuplex extends EventEmitter{
-  constructor({capture,playback,spawnProcess=spawn}={}){
+  constructor({capture,playback,playbackLeadInMs=0,spawnProcess=spawn}={}){
     super();this.captureDevice=deviceName(capture);this.playbackDevice=deviceName(playback);this.spawnProcess=spawnProcess;
+    if(!Number.isInteger(playbackLeadInMs)||playbackLeadInMs<0||playbackLeadInMs>1000)throw new Error('Playback lead-in must be 0..1000 milliseconds');
+    this.playbackLeadInBytes=playbackLeadInMs*24*2; // 24kHz, mono PCM16.
     this.turns=[];this.intake=null;this.pendingBytes=0;this.playing=false;this.closed=false;this.stopping=null;
   }
   child(command,args){
@@ -41,8 +43,13 @@ class AlsaDuplex extends EventEmitter{
     if(this.closed)throw new Error('Audio is closed');
     if(sampleRate!==24000||!(bytes instanceof Uint8Array)||bytes.length%2)throw new Error('Expected 24kHz mono PCM16 playback');
     if(!bytes.length)return;
-    if(this.pendingBytes+bytes.length>24000*2*60)throw new Error('Audio playback queue exceeded 60 seconds');
-    if(!this.intake){this.intake={queue:[],ended:false,writing:false,job:null};this.turns.push(this.intake);}
+    const leadInBytes=this.intake?0:this.playbackLeadInBytes;
+    if(this.pendingBytes+leadInBytes+bytes.length>24000*2*60)throw new Error('Audio playback queue exceeded 60 seconds');
+    if(!this.intake){
+      this.intake={queue:[],ended:false,writing:false,job:null};this.turns.push(this.intake);
+      // Prime the playback path before speech; never trim or fade its first samples.
+      if(leadInBytes){this.intake.queue.push(Buffer.alloc(leadInBytes));this.pendingBytes+=leadInBytes;}
+    }
     this.intake.queue.push(Buffer.from(bytes));this.pendingBytes+=bytes.length;this.pump();
   }
   endTurn(){if(this.intake){this.intake.ended=true;this.intake=null;this.pump();}}
