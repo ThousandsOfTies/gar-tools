@@ -85,6 +85,8 @@ class BleUart {
     void onConnect(NimBLEServer* server,NimBLEConnInfo& info) override {
       if(pipe_.handle_!=BLE_HS_CONN_HANDLE_NONE){server->disconnect(info.getConnHandle());return;}
       pipe_.handle_=info.getConnHandle();pipe_.payload_=20;pipe_.epoch_=true;
+      // Bonding alone does not encrypt a new connection. Request link security.
+      NimBLEDevice::startSecurity(info.getConnHandle());
     }
     void onDisconnect(NimBLEServer*,NimBLEConnInfo& info,int) override {
       if(pipe_.handle_!=info.getConnHandle())return;

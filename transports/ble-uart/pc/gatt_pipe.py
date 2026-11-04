@@ -27,7 +27,8 @@ async def pipe(args):
     closed=asyncio.Event()
     device=await BleakScanner.find_device_by_address(args.address,timeout=15)
     if device is None:raise ValueError('Device unavailable')
-    async with BleakClient(device,pair=True,timeout=90,disconnected_callback=lambda _:closed.set()) as client:
+    # Rediscover GATT handles after firmware updates; Windows may retain stale handles.
+    async with BleakClient(device,pair=True,timeout=90,winrt={"use_cached_services":False},disconnected_callback=lambda _:closed.set()) as client:
         service=client.services.get_service(args.service)
         if service is None:raise ValueError('Wrong service')
         rx=service.get_characteristic(args.rx);tx=service.get_characteristic(args.tx)
