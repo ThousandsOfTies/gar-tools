@@ -19,3 +19,18 @@ application bytes. RX requires encryption and authentication. TX is sent only
 after a secure authenticated bond and a notification subscription.
 
 These adapters require physical peer testing on each supported board/OS.
+
+
+## Host SDK substitute
+
+`host/NimBLEDevice.h` and `host/freertos/stream_buffer.h` substitute only the
+NimBLE 2.3.6 / FreeRTOS APIs consumed by the unchanged `arduino/BleUart.h`.
+Put `host/` before SDK headers in a host build. No Product protocol lives here.
+The fake peer starts each link unencrypted, including bonded reconnects;
+`startSecurity` must be called before authentication can complete. Authentication,
+subscription, disconnect, MTU and notification failure are independently controllable.
+Writes without authenticated encryption are rejected. A bounded stream buffer
+feeds the real receive callback and real BleUart polling/notification queue.
+This is a deterministic SDK test double, not the NimBLE stack or radio emulator.
+It does not establish Windows cache behavior, RF timing, real RTOS scheduling,
+cryptography or interoperability. Physical tests remain necessary.
