@@ -48,6 +48,7 @@ StickC Plus2の単体例は`--panel web-simulator/examples/stickc-parts`で起�
 | `rotary.mjs` / `<gar-rotary>` | 回転・押下を`gar-rotary-input`で通知し、`.value`でカウンタ表示を更新。通信は行わない。 |
 | `json-transport.mjs` / `JsonTransport` | `{url}`を注入し、`connect()`、`send(message)`、`close()`でJSON通信。`message`と`connection`を通知し、Productのメッセージ解釈は行わない。 |
 | `camera-input.mjs` / `<gar-camera-input>` | カメラ選択、映像プレビュー、JPEG WebSocket送信。`endpoint`で送信先を注入。 |
+| `microphone-input.mjs` / `<gar-microphone-input>` | 明示的に権限を与えたPCマイク。`.active`で収録し、`gar-microphone-pcm`にPCM16 mono/16kHzを通知。送信・保存・音声認識は行わない。`examples/microphone-parts`で独立した2台を確認できる。 |
 | `pca9685.js`, `sg90.js` | 任意の接続先・アドレス・校正を渡すPWM/サーボ表示。内部DOMとCSSはShadow DOMに閉じます。 |
 | `gamepad.js` | ゲームパッド入力を通知。ロボットの動作への割当はProduct側。 |
 | `telemetry-transport.mjs` | ローカルデモと読み取り専用WebSocket telemetry。初期状態と受信データの解釈を注入。 |

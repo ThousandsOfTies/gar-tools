@@ -34,3 +34,12 @@ feeds the real receive callback and real BleUart polling/notification queue.
 This is a deterministic SDK test double, not the NimBLE stack or radio emulator.
 It does not establish Windows cache behavior, RF timing, real RTOS scheduling,
 cryptography or interoperability. Physical tests remain necessary.
+
+`host/node-byte-port.cjs` adapts a host SDK provider's `connect`, `disconnect`,
+`write` and `subscribe` callbacks to a serial-like byte endpoint. A Product can
+pass it to the unchanged PC relay instead of its physical GATT byte adapter.
+It does not generate application messages, acknowledgements or successful
+authentication; those remain in the real relay and SDK-hosted control code.
+Each provider has one owner; distinct providers are independent. Run
+`node --test transports/ble-uart/host/node-byte-port.test.cjs` to verify the
+binary contract, ownership release, closed writes and independent endpoints.
