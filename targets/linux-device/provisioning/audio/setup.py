@@ -76,9 +76,15 @@ def main(settings):
             console = None
             try:
                 console = SshConsole(settings)
+                payload = {}
+                if settings.get("payloadFile"):
+                    payload = json.loads(
+                        Path(settings["payloadFile"]).read_text(encoding="utf-8")
+                    )
                 report = console.apply(
                     {
                         **settings,
+                        **payload,
                         "progressStart": settings.get(
                             "progressStart",
                             "音量の保存とUSB再接続時の復元を設定しています…",

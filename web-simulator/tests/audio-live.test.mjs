@@ -28,8 +28,53 @@ test('audio streams independently of a pending tool, duplicate calls execute onc
   socket.receive({toolCall:{functionCalls:[call]},serverContent:{modelTurn:{parts:[{inlineData:{mimeType:'audio/pcm;rate=24000',data:'AAA='}}]}}});await settle();
   assert.equal(count,1);assert.equal(audio.length,1);assert.equal(socket.sent.some(v=>v.toolResponse),false);
   finish({status:'completed'});await settle();assert.equal(socket.sent.at(-1).toolResponse.functionResponses[0].id,'body-1');
+  socket.receive({toolCall:{functionCalls:[call]}});await settle();
+  assert.equal(count,1);assert.equal(socket.sent.filter(value=>value.toolResponse).length,1,'Completed IDs must not generate another result-triggered reply');
   client.sendAudio(new Uint8Array(3200));assert.equal(socket.sent.at(-1).realtimeInput.audio.mimeType,'audio/pcm;rate=16000');
   client.stop();
+});
+
+test('parallel results return once together, retaining IDs and individual failures',async()=>{
+  let finish;const executed=[];
+  const {client,socket}=await fixture(call=>{
+    executed.push(call.id);
+    if(call.id==='slow')return new Promise(resolve=>{finish=resolve;});
+    throw new Error('PRIVATE_TOOL_ERROR');
+  });
+  const slow={id:'slow',name:'move_body',args:{mode:'lie'}},fast={id:'fast',name:'move_body',args:{mode:'stand'}};
+  socket.receive({toolCall:{functionCalls:[slow,fast,slow]}});await settle();
+  assert.equal(socket.sent.filter(value=>value.toolResponse).length,0);
+  finish({status:'completed'});await settle();
+  const replies=socket.sent.filter(value=>value.toolResponse);
+  assert.equal(replies.length,1);
+  assert.deepEqual(executed,['slow','fast']);
+  assert.deepEqual(replies[0].toolResponse.functionResponses.map(value=>value.id),['slow','fast']);
+  assert.equal(replies[0].toolResponse.functionResponses[0].response.result.status,'completed');
+  assert.ok(replies[0].toolResponse.functionResponses[1].response.error);
+  assert.ok(!JSON.stringify(replies).includes('PRIVATE_TOOL_ERROR'));client.stop();
+});
+
+test('cancelling one pending call releases the other result without waiting for its work',async()=>{
+  let finish;
+  const {client,socket}=await fixture(call=>call.id==='cancelled'?new Promise(resolve=>{finish=resolve;}):Promise.resolve({status:'ok'}));
+  socket.receive({toolCall:{functionCalls:[{id:'cancelled',name:'move_body'},{id:'remaining',name:'move_body'}]}});await settle();
+  socket.receive({toolCallCancellation:{ids:['cancelled']}});await settle();
+  assert.deepEqual(socket.sent.filter(value=>value.toolResponse)[0].toolResponse.functionResponses.map(value=>value.id),['remaining']);
+  finish({status:'completed'});await settle();
+  assert.equal(socket.sent.filter(value=>value.toolResponse).length,1);client.stop();
+});
+
+test('reconnect discards a pending old batch and accepts a fresh request once',async()=>{
+  let finish;
+  const {client,socket}=await fixture(()=>new Promise(resolve=>{finish=resolve;}));
+  socket.receive({toolCall:{functionCalls:[{id:'old',name:'move_body'}]}});await settle();client.stop();
+  const next=new Socket();client.factory=()=>next;client.onTool=async()=>({status:'fresh'});
+  const ready=client.connect({apiKey:'test',model:'gemini-3.8-live',voice:'Puck',instruction:'Test',tools:[{name:'move_body',behavior:'BLOCKING'}]});
+  next.onopen();next.receive({setupComplete:{}});await ready;
+  finish({status:'stale'});next.receive({toolCall:{functionCalls:[{id:'old',name:'move_body'}]}});await settle();
+  assert.equal(socket.sent.some(value=>value.toolResponse),false);
+  assert.equal(next.sent.filter(value=>value.toolResponse).length,1);
+  assert.equal(next.sent.at(-1).toolResponse.functionResponses[0].response.result.status,'fresh');client.stop();
 });
 test('cancellation and stopped sessions cannot send late tool results or audio',async()=>{
   let finish;const {client,socket}=await fixture(()=>new Promise(resolve=>{finish=resolve;}));

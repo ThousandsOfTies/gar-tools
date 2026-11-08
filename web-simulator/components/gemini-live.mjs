@@ -54,17 +54,31 @@ export class GeminiLive extends EventTarget{
     if(content?.outputTranscription?.text)this.emit('transcript',{role:'model',text:content.outputTranscription.text.slice(0,4000)});
     if(content?.turnComplete)this.emit('turn-end',{});
     if(message.toolCallCancellation?.ids){for(const id of message.toolCallCancellation.ids)this.calls.get(id)?.abort.abort();this.emit('cancel',{ids:message.toolCallCancellation.ids});}
-    for(const call of message.toolCall?.functionCalls||[])this.tool(call,generation);
+    const calls=message.toolCall?.functionCalls||[];
+    if(calls.length){
+      const results=await Promise.all(calls.map(call=>this.tool(call,generation)));
+      if(generation!==this.generation)return;
+      const functionResponses=results.filter(result=>result&&!this.calls.get(result.id)?.abort.signal.aborted);
+      if(functionResponses.length)this.send({toolResponse:{functionResponses}});
+    }
   }
   tool(call,generation){
     if(typeof call.id!=='string'||!call.id||call.id.length>160||!this.allowed.has(call.name))return;
     const existing=this.calls.get(call.id);
-    if(existing){if(existing.response)this.send({toolResponse:{functionResponses:[existing.response]}});return;}
+    // WebSocket delivers reliably. Replaying a completed result can trigger
+    // another model turn, so a call ID is executed and answered only once.
+    if(existing)return;
     if(this.calls.size>=128){this.fail('Tool call limit reached; reconnect');return;}
     const state={abort:new AbortController()};this.calls.set(call.id,state);
-    Promise.resolve().then(()=>this.onTool(call,{signal:state.abort.signal})).then(result=>({result}),()=>({error:'The application could not execute this operation.'})).then(response=>{
-      if(generation!==this.generation||state.abort.signal.aborted)return;
-      state.response={id:call.id,name:call.name,response};this.send({toolResponse:{functionResponses:[state.response]}});
+    return new Promise(resolve=>{
+      const cancelled=()=>resolve(null);state.abort.signal.addEventListener('abort',cancelled,{once:true});
+      Promise.resolve().then(()=>{
+        if(generation!==this.generation||state.abort.signal.aborted)return;
+        return this.onTool(call,{signal:state.abort.signal});
+      }).then(result=>({result}),()=>({error:'The application could not execute this operation.'})).then(response=>{
+        state.abort.signal.removeEventListener('abort',cancelled);
+        resolve(generation!==this.generation||state.abort.signal.aborted?null:{id:call.id,name:call.name,response});
+      });
     });
   }
   fail(message){this.stop();this.emit('error',message);}
