@@ -17,19 +17,30 @@ def main(settings):
     root.resizable(False, False)
     frame = ttk.Frame(root, padding=20)
     frame.grid()
-    ttk.Label(frame, text="起動時のスピーカー音量を復元できるようにします").grid(
-        row=0, column=0, columnspan=2, sticky="w", pady=(0, 12)
-    )
-    ttk.Label(frame, text="Linuxのパスワードは保存しません。Wi-Fiパスワードの入力は不要です。").grid(
-        row=1, column=0, columnspan=2, sticky="w", pady=(0, 12)
-    )
+    ttk.Label(
+        frame,
+        text=settings.get("heading", "起動時のスピーカー音量を復元できるようにします"),
+    ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
+    ttk.Label(
+        frame,
+        text=settings.get(
+            "description",
+            "Linuxのパスワードは保存しません。Wi-Fiパスワードの入力は不要です。",
+        ),
+    ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 12))
     ttk.Label(frame, text="実機Linuxのパスワード").grid(row=2, column=0, padx=(0, 12))
     password = tk.StringVar()
     entry = ttk.Entry(frame, textvariable=password, show="●", width=30)
     entry.grid(row=2, column=1)
     entry.focus_set()
-    status = tk.StringVar(value="音量の保存とUSB再接続時の復元設定に管理者認証が必要です。")
-    ttk.Label(frame, textvariable=status, wraplength=480).grid(row=3, column=0, columnspan=2, sticky="w", pady=14)
+    status = tk.StringVar(
+        value=settings.get(
+            "initialStatus", "音量の保存とUSB再接続時の復元設定に管理者認証が必要です。"
+        )
+    )
+    ttk.Label(frame, textvariable=status, wraplength=480).grid(
+        row=3, column=0, columnspan=2, sticky="w", pady=14
+    )
     result = {"ok": False, "state": "cancelled"}
     busy = False
 
@@ -43,7 +54,7 @@ def main(settings):
         button.config(state="normal")
         Path(settings["resultFile"]).write_text(json.dumps(report), encoding="utf-8")
         status.set(
-            "音量の保存・復元テストが完了しました。"
+            settings.get("successMessage", "音量の保存・復元テストが完了しました。")
             if report.get("ok")
             else "設定できませんでした：" + report.get("error", "unknown")
         )
@@ -68,8 +79,14 @@ def main(settings):
                 report = console.apply(
                     {
                         **settings,
-                        "progressStart": "音量の保存とUSB再接続時の復元を設定しています…",
-                        "progressApply": "音量を保存し、保存値の復元をテストしています…",
+                        "progressStart": settings.get(
+                            "progressStart",
+                            "音量の保存とUSB再接続時の復元を設定しています…",
+                        ),
+                        "progressApply": settings.get(
+                            "progressApply",
+                            "音量を保存し、保存値の復元をテストしています…",
+                        ),
                     },
                     secret,
                     progress,
@@ -78,7 +95,9 @@ def main(settings):
                 report = {
                     "ok": False,
                     "state": "failed",
-                    "error": str(error) if type(error) is RuntimeError else "音量設定の結果を確認できませんでした。",
+                    "error": str(error)
+                    if type(error) is RuntimeError
+                    else "音量設定の結果を確認できませんでした。",
                 }
             finally:
                 secret = ""
@@ -88,9 +107,16 @@ def main(settings):
 
         threading.Thread(target=work, daemon=True).start()
 
-    button = ttk.Button(frame, text="音量の保存・復元を設定", command=submit)
+    button = ttk.Button(
+        frame,
+        text=settings.get("buttonLabel", "音量の保存・復元を設定"),
+        command=submit,
+    )
     button.grid(row=4, column=1, sticky="e")
-    root.protocol("WM_DELETE_WINDOW", lambda: status.set("設定完了までお待ちください。") if busy else root.destroy())
+    root.protocol(
+        "WM_DELETE_WINDOW",
+        lambda: status.set("設定完了までお待ちください。") if busy else root.destroy(),
+    )
     root.mainloop()
     print(json.dumps(result), flush=True)
     return 0 if result.get("ok") else 1
