@@ -38,3 +38,16 @@ seconds of raw output. `failure` reports unplug/process errors. No shell,
 temporary audio file, default-device fallback, cloud transport, VAD or automatic
 recording is implemented here. The caller explicitly starts capture and owns
 echo policy, mute, provider credentials and session lifetime.
+
+`probe.py` provides bounded Linux observations for a Product's GAR Target probe
+adapter. Pass a JSON object with `action`, stable ALSA `card` ID and systemd
+`service` binding. `status` / `audio-status` only inspect mixer, endpoints,
+capture processes, service and sanitized Live error/status log lines. They do
+not record audio or measure microphone signal levels. A successful process or
+mixer observation does not prove audible output or intelligible input.
+
+Explicit `speaker-test` plays a quiet 0.4-second 660 Hz tone; `restore-speaker`
+sets PCM playback to the supplied `volume` (limited to 1..50 percent) and
+unmutes it. These actions do not stop/restart services or persist mixer state.
+Neither a reported ALSA 0% nor successful aplay alone establishes that a speaker
+is silent; some USB device controls do not reflect its actual audible gain.
