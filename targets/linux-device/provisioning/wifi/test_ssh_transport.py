@@ -32,6 +32,7 @@ print('__GAR_WIFI_RESULT__'+json.dumps({'ok':True,'state':'connected'}),flush=Tr
 class PrivateTransportTests(unittest.TestCase):
     def apply(self, mode):
         console = driver.SshConsole.__new__(driver.SshConsole)
+        console.settings = {}
         console.options = []
         console.endpoint = "test-only"
         console.needs_password = mode != "no-prompt"

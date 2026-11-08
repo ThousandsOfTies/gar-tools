@@ -119,11 +119,13 @@ class SshConsole:
         pass
 
     def apply(self, settings, linux_password, progress):
-        progress("既存のSSH鍵と管理権限でWi-Fiを設定しています…")
+        progress(settings.get("progressStart", "既存のSSH鍵と管理権限でWi-Fiを設定しています…"))
         directory = "/tmp/gar-wifi-" + uuid.uuid4().hex
         create = self.run(
             "umask 077; mkdir " + directory + "; cat > " + directory + "/configure.py",
-            data=Path(__file__).with_name("configure.py").read_text(encoding="utf-8"),
+            data=Path(self.settings.get("recipeSource", Path(__file__).with_name("configure.py"))).read_text(
+                encoding="utf-8"
+            ),
         )
         if create.returncode:
             raise RuntimeError("Wi-Fi設定用の一時プログラムを準備できませんでした。")
@@ -185,7 +187,7 @@ class SshConsole:
                             process.stdin.write((json.dumps(settings) + "\n").encode())
                             process.stdin.flush()
                             input_sent = True
-                            progress("Wi-Fiの接続・外部通信・再接続を確認しています…")
+                            progress(settings.get("progressApply", "Wi-Fiの接続・外部通信・再接続を確認しています…"))
                         match = re.search(rb"^__GAR_WIFI_RESULT__([^\r\n]+)\r?\n", output, re.M)
                         if match:
                             process.stdin.close()
