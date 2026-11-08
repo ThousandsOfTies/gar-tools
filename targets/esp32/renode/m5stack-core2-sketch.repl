@@ -11,4 +11,4 @@
 // - UART0 analyzer
 // - GPIO buttons A/B/C
 // - SPI LCD compatible with the M5Stack display path
-// - Wi-Fi/network model or protocol bridge suitable for Vibe Remote
+// - Wi-Fi/network model or a Product-supplied protocol bridge

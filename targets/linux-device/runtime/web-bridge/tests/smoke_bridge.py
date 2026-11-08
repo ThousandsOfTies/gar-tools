@@ -7,7 +7,6 @@ aiohttp because it verifies the runtime HTTP and WebSocket integration.
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import json
 import os
@@ -24,6 +23,48 @@ from aiohttp import ClientConnectorError, ClientSession, WSServerHandshakeError
 WEB_BRIDGE_DIR = Path(__file__).resolve().parents[1]
 BRIDGE_SCRIPT = WEB_BRIDGE_DIR / "bridge.py"
 STUB_CONNECTION_LIMIT = 16
+
+SMOKE_HARDWARE_FILES = {
+    "linux-device": {
+        "gpio.csv": """name,chip,line,direction,role,active,initial,pull,sim_control,description
+power_button,/dev/gpiochip0,17,input,button,high,,pull-down,pull,test button
+status_led,/dev/gpiochip0,18,output,led,high,0,,value,test status LED
+activity_led,/dev/gpiochip0,24,output,led,high,0,,value,test activity LED
+aux_button,/dev/gpiochip0,27,input,button,high,,pull-down,pull,test auxiliary button
+""",
+        "i2c.csv": """name,bus,dev,address,driver,sim,description
+display,1,/dev/i2c-1,0x3c,ssd1306,ssd1306,test display
+range,1,/dev/i2c-1,0x29,vl53l0x,vl53l0x,test range sensor
+servo,1,/dev/i2c-1,0x40,pca9685,pca9685,test PWM controller
+""",
+        "spi.csv": """name,bus,chip_select,dev,mode,max_speed_hz,driver,sim,description
+rfid,0,0,/dev/spidev0.0,0,1000000,mfrc522,mfrc522,test RFID reader
+""",
+    },
+    "luckfox-rv1106": {
+        "gpio.csv": """name,chip,line,direction,role,active,initial,pull,sim_control,description
+encoder_a,/dev/gpiochip0,20,input,encoder,high,,pull-up,,test encoder phase A
+encoder_b,/dev/gpiochip0,21,input,encoder,high,,pull-up,,test encoder phase B
+encoder_sw,/dev/gpiochip0,22,input,button,low,,pull-up,,test encoder switch
+lcd_dc,/dev/gpiochip0,23,output,display_ctrl,high,1,,,test display DC
+lcd_rst,/dev/gpiochip0,24,output,display_ctrl,high,1,,,test display reset
+""",
+        "spi.csv": """name,bus,chip_select,dev,mode,max_speed_hz,driver,sim,description
+display,0,0,/dev/spidev0.0,0,40000000,ili9341,ili9341,test display
+""",
+    },
+}
+
+
+def _write_smoke_hardware(root: Path) -> list[Path]:
+    hardware_dirs: list[Path] = []
+    for target_name, files in SMOKE_HARDWARE_FILES.items():
+        hardware_dir = root / target_name / "hardware"
+        hardware_dir.mkdir(parents=True)
+        for filename, content in files.items():
+            (hardware_dir / filename).write_text(content, encoding="utf-8")
+        hardware_dirs.append(hardware_dir)
+    return hardware_dirs
 
 
 def _free_tcp_port() -> int:
@@ -167,7 +208,7 @@ def _assert_hardware_mapping(
         assert gpio["inputs"] == [17, 27]
         assert gpio["outputs"] == [18, 24]
         assert gpio["rotary"] is None
-        assert devices == ["mfrc522", "ssd1306", "vl53l0x"]
+        assert devices == ["mfrc522", "pca9685", "ssd1306", "vl53l0x"]
         return "linux-device", {"req": "get", "device": "gpio", "line": 17}
 
     if hardware_dir.name == "hardware" and hardware_dir.parent.name == "luckfox-rv1106":
@@ -314,6 +355,35 @@ async def check_hardware_directory(hardware_dir: Path) -> None:
                         _unix_exchange, unix_socket, unix_request
                     )
                     assert unix_response == {"value": 0}
+                    if target_name == "linux-device":
+                        channels = [
+                            {
+                                "channel": channel,
+                                "on": 0,
+                                "off": 307 if channel == 0 else 0,
+                                "fullOn": False,
+                                "fullOff": False,
+                            }
+                            for channel in range(16)
+                        ]
+                        await asyncio.to_thread(
+                            _unix_exchange_many,
+                            unix_socket,
+                            [
+                                {
+                                    "event": "set",
+                                    "device": "pca9685",
+                                    "address": 0x40,
+                                    "frequencyHz": 50.0,
+                                    "channels": channels,
+                                },
+                                unix_request,
+                            ],
+                        )
+                        async with session.get(f"{base_url}/api/state") as response:
+                            servo_state = await response.json()
+                        assert servo_state["i2c"]["pca9685"]["frequencyHz"] == 50.0
+                        assert servo_state["i2c"]["pca9685"]["channels"][0]["off"] == 307
                     invalid_unix_response = await asyncio.to_thread(
                         _unix_exchange,
                         unix_socket,
@@ -491,22 +561,10 @@ async def check_empty_hardware_directory() -> None:
                         process.wait(timeout=3)
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "hardware_dirs",
-        metavar="HARDWARE_DIR",
-        nargs="+",
-        type=Path,
-        help="target hardware directories to exercise",
-    )
-    return parser.parse_args()
-
-
 def main() -> None:
-    arguments = _parse_args()
-    for hardware_dir in arguments.hardware_dirs:
-        asyncio.run(check_hardware_directory(hardware_dir))
+    with tempfile.TemporaryDirectory(prefix="gar-smoke-hardware-") as root_name:
+        for hardware_dir in _write_smoke_hardware(Path(root_name)):
+            asyncio.run(check_hardware_directory(hardware_dir))
     asyncio.run(check_empty_hardware_directory())
 
 

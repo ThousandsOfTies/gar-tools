@@ -31,6 +31,7 @@ from request_validation import (
     browser_request_allowed,
     configured_line,
     parse_json_object,
+    pca9685_state,
     resolve_panel_file,
     rfid_uid,
 )
@@ -43,8 +44,18 @@ HTTP_HOST = os.environ.get("GAR_BRIDGE_HOST", "127.0.0.1")
 HTTP_PORT = int(os.environ.get("GAR_BRIDGE_PORT", "8080"))
 PANEL_DIR = Path(__file__).parent / "panel"
 COMPONENTS_DIR = Path(__file__).parent / "components"
+# Target-independent browser parts, shared with static previews and other boards.
+# Source checkouts and installed runtimes use the same /gar-components contract.
+_SOURCE_WEB_COMPONENTS = Path(__file__).resolve().parents[4] / "web-simulator" / "components"
+_PACKAGED_WEB_COMPONENTS = Path(__file__).resolve().parent / "gar-components"
+WEB_COMPONENTS_DIR = Path(os.environ.get(
+    "GAR_WEB_COMPONENTS_DIR",
+    str(_SOURCE_WEB_COMPONENTS if _SOURCE_WEB_COMPONENTS.is_dir()
+        else _PACKAGED_WEB_COMPONENTS if _PACKAGED_WEB_COMPONENTS.is_dir()
+        else Path("/usr/local/share/gar/web-simulator/components")),
+))
 # Application artifacts select their screen by writing an absolute directory
-# here.  Reading it for each request deliberately makes `gar sim app deploy`
+# here.  Reading it for each request deliberately makes `gar sim deploy app`
 # switch a screen without restarting the bridge or the simulated hardware.
 PANEL_DIR_CONFIG = Path("/etc/gar/panel-dir")
 METRICS_DIR = Path(os.environ.get("GAR_METRICS_DIR", "/run/gar/metrics"))
@@ -65,7 +76,7 @@ ALLOWED_HTTP_HOSTS = _allowed_http_hosts()
 
 MAX_BROWSER_MESSAGE_BYTES = 64 * 1024
 # A 2048x1536 JPEG from a real UVC camera can exceed 2 MiB for detailed scenes.
-# Keep a finite per-frame limit, while allowing the native 3 MP GarStream camera
+# Keep a finite per-frame limit, while allowing a native 3 MP camera
 # mode to reach the simulator without an artificial downscale.
 MAX_CAMERA_FRAME_BYTES = 8 * 1024 * 1024
 MAX_STUB_LINE_BYTES = 2 * 1024 * 1024
@@ -106,11 +117,26 @@ state: dict[str, object] = {
     "i2c": {
         "vl53l0x": {"range_mm": 300, "status": 0x01},
         "ssd1306": {"framebuf": None},
+        "pca9685": {
+            "address": 0x40,
+            "frequencyHz": None,
+            "channels": [
+                {
+                    "channel": channel,
+                    "on": 0,
+                    "off": 0,
+                    "fullOn": False,
+                    "fullOff": True,
+                }
+                for channel in range(16)
+            ],
+        },
     },
     "spi": {
         "mfrc522": {"uid": None, "present": False},
         "lcd": {"pixels": None},
         "ili9341": {"pixels": None, "width": 320, "height": 240},
+        "gc9a01": {"pixels": None, "width": 240, "height": 240},
     },
 }
 
@@ -525,12 +551,22 @@ def handle_stub_message(raw: str, loop: asyncio.AbstractEventLoop) -> str | None
             oled["framebuf"] = frame_buffer
             _schedule_broadcast({"type": "oled", "framebuf": frame_buffer}, loop)
 
-        elif event == "set" and device == "ili9341":
-            _require_device("ili9341")
-            width = bounded_int(message, "width", default=320, minimum=1, maximum=2048)
+        elif event == "set" and device == "pca9685":
+            _require_device("pca9685")
+            controller = pca9685_state(message)
+            i2c_state = state["i2c"]
+            assert isinstance(i2c_state, dict)
+            i2c_state["pca9685"] = controller
+            _schedule_broadcast({"type": "pca9685", **controller}, loop)
+
+        elif event == "set" and device in {"ili9341", "gc9a01"}:
+            _require_device(device)
+            width = bounded_int(message, "width", default=240 if device == "gc9a01" else 320, minimum=1, maximum=2048)
             height = bounded_int(
                 message, "height", default=240, minimum=1, maximum=2048
             )
+            if device == "gc9a01" and (width != 240 or height != 240):
+                raise RequestValidationError("GC9A01 frames must be 240x240")
             pixels = _pixel_data(
                 message,
                 "pixels",
@@ -538,14 +574,14 @@ def handle_stub_message(raw: str, loop: asyncio.AbstractEventLoop) -> str | None
             )
             spi_state = state["spi"]
             assert isinstance(spi_state, dict)
-            spi_state["ili9341"] = {
+            spi_state[device] = {
                 "pixels": pixels,
                 "width": width,
                 "height": height,
             }
             _schedule_broadcast(
                 {
-                    "type": "ili9341",
+                    "type": device,
                     "pixels": pixels,
                     "width": width,
                     "height": height,
@@ -988,15 +1024,23 @@ async def camera_input_websocket(request: web.Request) -> web.WebSocketResponse:
 
 async def panel_file_handler(request: web.Request) -> web.Response:
     request_path = request.match_info.get("path_info", "")
+    file_path = _resolve_panel_request(request_path)
+    if file_path is None:
+        return web.Response(status=404, text="Not found")
+    return web.FileResponse(file_path, headers={"Cache-Control": "no-store"})
+
+
+def _resolve_panel_request(request_path: str) -> Path | None:
+    """Resolve shared components first, then files owned by the active panel."""
+    if request_path.startswith("gar-components/"):
+        return resolve_panel_file(WEB_COMPONENTS_DIR, request_path.removeprefix("gar-components/"))
     if request_path.startswith("components/"):
         file_path = resolve_panel_file(
             COMPONENTS_DIR, request_path.removeprefix("components/")
         )
-    else:
-        file_path = resolve_panel_file(_active_panel_dir(), request_path)
-    if file_path is None:
-        return web.Response(status=404, text="Not found")
-    return web.FileResponse(file_path, headers={"Cache-Control": "no-store"})
+        if file_path is not None:
+            return file_path
+    return resolve_panel_file(_active_panel_dir(), request_path)
 
 
 def _active_panel_dir() -> Path:

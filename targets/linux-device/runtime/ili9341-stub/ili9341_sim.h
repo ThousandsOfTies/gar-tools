@@ -5,7 +5,7 @@
 /*
  * ILI9341 command/pixel-stream simulation for the CUSE SPI stub.
  *
- * gar-stream-rx's ili9341.py drives the panel write-only over /dev/spidevX.Y,
+ * Product drivers can drive the panel write-only over /dev/spidevX.Y,
  * using a separate DC (data/command) GPIO line to say whether the current
  * SPI bytes are a command or pixel data - that split isn't visible in the
  * SPI ioctl itself. This module asks the web bridge (GAR_HW_SIM_SOCK or

@@ -1,3 +1,0 @@
-component_id,name,kind,part_number,description
-luckfox_rk3506,Luckfox Lyra Plus,board,RK3506G2,Embedded Linux board
-ethernet_uplink,Ethernet interface,interface,RJ45,Wired network interface

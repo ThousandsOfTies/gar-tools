@@ -122,30 +122,9 @@ class HardwareConfig:
                 "displayDc": self.display_dc_line,
             },
             "devices": list(self.device_drivers),
-            "source": str(self.source_dir) if self.source_dir else "built-in defaults",
+            "source": str(self.source_dir) if self.source_dir else "unconfigured",
         }
 
-
-# These values preserve the original linux-device demo when the bridge is run
-# directly, without GAR_HARDWARE_DIR.  Once gpio.csv is present, it is the sole
-# source of GPIO line assignments.
-DEFAULT_GPIO_LINES = (
-    GpioLine("power_button", 17, "input", "button", True, "pull-down"),
-    GpioLine("status_led", 18, "output", "led", True, ""),
-    GpioLine("activity_led", 24, "output", "led", True, ""),
-    GpioLine("aux_button", 27, "input", "button", True, "pull-down"),
-    GpioLine("encoder_a", 5, "input", "encoder", True, "pull-up"),
-    GpioLine("encoder_b", 6, "input", "encoder", True, "pull-up"),
-    GpioLine("encoder_sw", 13, "input", "button", False, "pull-up"),
-    GpioLine("lcd_dc", 16, "output", "display_ctrl", True, ""),
-)
-DEFAULT_DEVICE_DRIVERS = (
-    "ili9341",
-    "mfrc522",
-    "ssd1306",
-    "st7789",
-    "vl53l0x",
-)
 
 _ROTARY_NAMES = {
     "clock": ("encoder_a", "rotary_a", "rotary_clk", "ky040_a", "ky040_clk"),
@@ -313,20 +292,20 @@ def _device_drivers(hardware_dir: Path) -> tuple[str, ...]:
     return tuple(sorted(drivers))
 
 
-def default_hardware_config() -> HardwareConfig:
+def unconfigured_hardware_config() -> HardwareConfig:
     return HardwareConfig(
-        gpio_lines=DEFAULT_GPIO_LINES,
-        rotary=RotaryLines(clock=5, data=6, switch=13),
-        display_dc_line=16,
-        device_drivers=DEFAULT_DEVICE_DRIVERS,
+        gpio_lines=(),
+        rotary=None,
+        display_dc_line=None,
+        device_drivers=(),
         source_dir=None,
     )
 
 
 def load_hardware_config(hardware_dir: str | Path | None) -> HardwareConfig:
-    """Load GAR hardware CSVs, using demo defaults only with no explicit dir."""
+    """Load product-owned GAR hardware CSVs without target-owned defaults."""
     if hardware_dir is None:
-        return default_hardware_config()
+        return unconfigured_hardware_config()
 
     source_dir = Path(hardware_dir).expanduser().resolve()
     if not source_dir.is_dir():

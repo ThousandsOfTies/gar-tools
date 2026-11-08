@@ -69,18 +69,18 @@ Test SSH:
 
 ssh root@10.42.0.1
 
-## 5) Deploy binary with existing GAR script
+## 5) Deploy the selected Product
 
-From this repository:
+Application source and build logic belong to the Product workspace. Register
+this target and deploy its Product artifact through GAR:
 
-export LUCKFOX_HOST=root@10.42.0.1
-export LUCKFOX_DEPLOY_DIR=/opt/gar/bin
-cd targets/luckfox-rv1106/app-template
-make deploy
+```bash
+gar target build --workspace Local/Product
+gar target deploy --workspace Local/Product
+```
 
-Or call deploy directly:
-
-targets/luckfox-rv1106/scripts/deploy_ssh.sh targets/luckfox-rv1106/app-template/build/gar_luckfox_streamer
+Use `scripts/deploy_ssh.sh` only for low-level target bring-up diagnostics with
+an explicitly selected test binary.
 
 ## 6) Make it persistent (important)
 

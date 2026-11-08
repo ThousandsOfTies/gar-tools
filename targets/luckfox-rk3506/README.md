@@ -42,7 +42,7 @@ The constrained installer owns both files and a normal artifact deploy changes n
 
 `reload` records a running build ID only after restart and health succeed and
 the requested ID matches schema-v2
-`/opt/gar/apps/<app>/.gar-artifact.json`. `running-build-id` returns that ID
+`/opt/gar/apps/<app>/.artifact-info.json`. `running-build-id` returns that ID
 only while the application remains healthy and the deployed marker still
 matches. This detects the important case where new files were placed but an
 old process is still running.
@@ -72,7 +72,20 @@ any application payload is transferred.
 
 `hardware/capabilities.json` declares the board's available GPIO, SPI, and
 network resources. The file is target-owned and is intentionally free of
-application components or wiring. `hardware/` is only a blank workspace
-template; product requirements and physical bindings are kept outside this
-Target. This separation lets GAR reject incompatible assignments before a
-deploy without turning a board definition into an application profile.
+application components or wiring. Product CSV assignments, requirements, and
+physical bindings are kept outside this Target and supplied by the selected
+Product workspace. This separation lets GAR reject incompatible assignments
+before a deploy without turning a board definition into an application profile.
+
+## Application stop capability
+
+Recipe version 6 declares `provisioning.ssh_scp.lifecycle.stop: true`.
+`gar target stop --workspace NAME --app APP` calls the recipe's `stop APP`,
+clears the recorded running build ID, stops the app service, and checks that
+it is no longer running. Repeated stop is supported for a deployed app.
+This stops the application for the current boot; it does not disable boot
+startup or power off the Target.
+
+Update the Product-pinned gar-tools checkout and run `gar target prepare`
+to install this helper before using stop. Rebuild artifacts after a recipe
+version change so later preflight/deploy/start checks see matching provenance.

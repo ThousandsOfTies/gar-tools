@@ -1,15 +1,12 @@
-# cuse_spi_ili9341 — CUSE SPI stub (ILI9341 320×240 sim, gar-stream-rx)
+# cuse_spi_ili9341 — reusable CUSE SPI stub (ILI9341 320×240 sim)
 
-`gar-stream-rx`（Luckfox Lyra Plus 上のビデオモニター）の `ili9341.py` が使う
-`/dev/spidevX.Y` を CUSE で userspace に生やし、未改変のアプリがそのまま
-ILI9341 パネルへ描画できるようにするスタブです。`spi-stub/cuse_spi`
-（MFRC-522 sim）と同じ ioctl プラミングを再利用し、デバイス固有の状態機械
-だけを `ili9341_sim.c` に分離しています。
+Productが使う`/dev/spidevX.Y`をCUSEでuserspaceに生やし、未改変のアプリが
+そのままILI9341パネルへ描画できるようにするスタブです。
+`spi-stub/cuse_spi`（MFRC-522 sim）と同じioctlプラミングを再利用し、
+デバイス固有の状態機械だけを`ili9341_sim.c`に分離しています。
 
-同じ `/dev/spidev0.0` という慣習的なノード名を使いますが、対象アプリ
-シナリオが異なる（`spi-stub` は gar-adhoc-app の sensor_demo、
-こちらは gar-stream-rx）ため、**同時に2つを起動する想定はありません**。
-どちらか一方だけを、そのシナリオに合わせて起動してください。
+同じ`/dev/spidev0.0`という慣習的なnode名でMFRC-522 stubと同時に起動する
+想定はありません。Productの`spi.csv`が選んだproviderだけを起動してください。
 
 ## なぜ DC (data/command) の扱いが特別か
 
@@ -21,8 +18,8 @@ web bridge（`GAR_HW_SIM_SOCK` または `GAR_RUNTIME_DIR/hw_sim.sock`）に
 「DC ピンの現在値」を問い合わせ、それに応じてコマンド/データを振り分けます。
 
 DCピンのgpio-sim上のline番号は`--dc-line=N`で指定します。通常のruntime
-起動では、targetの`hardware/gpio.csv`にある`lcd_dc`のlineをlauncherと
-web bridgeが共有するため、個別指定は不要です。
+起動では、Product workspaceの`hardware/gpio.csv`にある`lcd_dc`のlineを
+launcherとweb bridgeが共有するため、個別指定は不要です。
 
 ## 対応 ioctl
 
@@ -58,8 +55,8 @@ web bridgeが共有するため、個別指定は不要です。
 通常は選択済みのBuildEnvironmentでGARにbuild・配置させます。
 
 ```bash
-gar sim runtime build
-gar sim runtime deploy
+gar sim build runtime
+gar sim deploy runtime
 ```
 
 componentを単独で調査するときだけ、その環境に合うcompilerを明示します。
@@ -82,13 +79,13 @@ sudo ./cuse_spi_ili9341 -f --devname=spidev0.0 --dc-line=<lcd-dc-line>
 ```
 
 `-f`はforeground実行です。通常の常駐起動、hardware CSVの反映、device nodeの
-permission設定は`gar sim runtime start`が担当します。
+permission設定は`gar sim start runtime`が担当します。
 
 ## 動作確認の受け入れ基準
 
-1. `gar sim runtime start`で`cuse_spi_ili9341`が常駐し、`/dev/spidev0.0`が見える
+1. `gar sim start runtime`で`cuse_spi_ili9341`が常駐し、`/dev/spidev0.0`が見える
 2. `video_monitor.py`（LD_PRELOAD なし）が初期化シーケンスを流せてエラーにならない
 3. カラーバー分岐を表示させた状態で Virtual Hardware Panel の ILI9341 canvas に
    映像が表示される
 4. Hardware PanelからKY-040を回転させても表示が壊れない
-5. `gar sim runtime diag --json`がruntime全体を正常と判定する
+5. `gar sim diag runtime --json`がruntime全体を正常と判定する

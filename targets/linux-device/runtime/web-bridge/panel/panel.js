@@ -250,7 +250,7 @@ function drawLcd(pixelsB64) {
   ctx.putImageData(imgData, 0, 0);
 }
 
-/* ---- ILI9341 (gar-stream-rx, RGB565, size can change with MADCTL rotation) ---- */
+/* ---- ILI9341 (RGB565, size can change with MADCTL rotation) ---- */
 function drawIli9341(pixelsB64, width, height) {
   const canvas = document.getElementById("ili9341-canvas");
   if (canvas.width !== width) canvas.width = width;
@@ -270,7 +270,7 @@ function drawIli9341(pixelsB64, width, height) {
   ctx.putImageData(imgData, 0, 0);
 }
 
-/* ---- KY-040 rotary encoder (gar-stream-rx) ---- */
+/* ---- KY-040 rotary encoder ---- */
 function setRotaryCounter(v) {
   const el = document.getElementById("rotary-counter");
   if (el) el.textContent = v;

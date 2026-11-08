@@ -7,7 +7,7 @@ runtime_root="$(cd "$script_dir/.." && pwd)"
 linux_runtime_root="${GAR_LINUX_RUNTIME_ROOT:-$runtime_root/../../linux-device/runtime}"
 run_dir="${GAR_RUNTIME_DIR:-/tmp/gar-luckfox-runtime}"
 sock_path="${GAR_HW_SIM_SOCK:-$run_dir/hw_sim.sock}"
-hardware_dir="${GAR_HARDWARE_DIR:-$runtime_root/../hardware}"
+hardware_dir="${GAR_HARDWARE_DIR:?GAR_HARDWARE_DIR must point to the product hardware directory}"
 
 i2c_dev="${GAR_LUCKFOX_I2C_DEV:-i2c-3}"
 spi_dev="${GAR_LUCKFOX_SPI_DEV:-spidev0.0}"
@@ -22,7 +22,10 @@ dc_line="${GAR_LUCKFOX_LCD_DC_LINE:-}"
 if [[ -z "$dc_line" && -f "$hardware_dir/gpio.csv" ]]; then
   dc_line="$(awk -F, '$1 == "lcd_dc" { print $3; exit }' "$hardware_dir/gpio.csv")"
 fi
-dc_line="${dc_line:-23}"
+if [[ -z "$dc_line" ]]; then
+  echo "LCD DC line is not configured; set GAR_LUCKFOX_LCD_DC_LINE or add lcd_dc to $hardware_dir/gpio.csv"
+  exit 1
+fi
 
 if [[ ! "$dc_line" =~ ^[0-9]+$ ]]; then
   echo "invalid LCD DC line: $dc_line"

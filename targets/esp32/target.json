@@ -10,6 +10,6 @@
   },
   "backendNotes": {
     "simulator": "Wokwi is the primary visible simulation backend.",
-    "advanced": "QEMU, Renode, fake-idf, and probes are optional target tools, not default setup backends."
+    "advanced": "QEMU, Renode, and fake-idf are optional target tools, not default setup backends. Product protocol probes live in the Product workspace."
   }
 }

@@ -5,11 +5,11 @@
   "toolsRoot": "targets/linux-device",
   "defaultBackends": {
     "codespace": "local",
-    "simulator": "local_docker",
+    "simulator": "ssh_remote",
     "target": "adb_usb"
   },
   "backendNotes": {
-    "simulator": "Local Docker is the default simulation host. GPIO uses the host kernel gpio-sim, so Linux 5.17 or newer is required. EC2 Graviton remains available through ssh_remote.",
+    "simulator": "SSH Remote uses an Ubuntu Sim Host on VirtualBox or AWS. GPIO requires the host kernel gpio-sim module. Docker host settings remain available for existing local_docker workspaces.",
     "runtime": "targets/linux-device/runtime"
   },
   "simulation": {

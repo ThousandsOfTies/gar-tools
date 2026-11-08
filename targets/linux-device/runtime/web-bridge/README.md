@@ -9,6 +9,20 @@ One aiohttp server provides all browser-facing endpoints:
 - `ws://HOST:8080/ws` — live events and panel commands
 - `GAR_HW_SIM_SOCK` — newline-delimited JSON Unix socket used by C stubs
 
+Target-independent Web Components are served at `/gar-components/*` from the
+shared `web-simulator/components` library. The legacy runtime components remain
+available at `/components/*`; if a Product component with that name does not
+exist in the runtime, the request falls back to the active Product panel.
+
+Legacy tags `gar-rotary-control`, `gar-ili9341-display` and `gar-bridge-status`
+now reuse the shared Shadow DOM components. They do not open a connection or
+interpret bridge messages. In the Product adapter, subscribe to
+`gar-rotary-input`, set the rotary's `value`, call the display's `writeFrame`,
+and inject the status indicator's `source`. `bridge-client.js` exports the
+configurable `BridgeClient` class (`new BridgeClient({url})`, then `connect()`),
+without a singleton. New panels use `/gar-components/*` directly and keep bridge
+message mapping in their own Product adapter.
+
 The panel derives `ws://` or `wss://` and the port from its own URL. Therefore
 only the HTTP port has to be published by Docker or forwarded over SSH.
 
@@ -30,15 +44,21 @@ names give GPIOs their bridge-specific meaning:
 | Rotary switch | `encoder_sw`, `rotary_sw`, `ky040_sw` |
 | Display data/command | `lcd_dc`, `display_dc`, `ili9341_dc` |
 
+The reusable I2C stub also models a PCA9685 at its default address `0x40`.
+Register writes are published as `state.i2c.pca9685` and live `pca9685`
+WebSocket messages. A Product opts into that model with `sim=pca9685` in its
+`i2c.csv`; Product panels decide how many output channels are connected to
+physical actuators.
+
 The rotary mapping is accepted only when all three rotary lines are present.
 GPIO rows with role `button` or `led` become the corresponding panel controls.
 The `sim` column in `i2c.csv` and `spi.csv` decides which device sections the
 panel displays. An empty `sim` value means that GAR does not emulate that real
 device. Older CSVs without a `sim` column fall back to `driver`.
 
-When `GAR_HARDWARE_DIR` is unset, the bridge retains the original linux-device
-demo mapping (buttons 17/27, LEDs 18/24, rotary 5/6/13, and display DC 16).
-When a directory is explicitly configured, a missing or headers-only
+When `GAR_HARDWARE_DIR` is unset, the bridge starts without GPIO or simulated
+devices; it never invents an application profile from the selected target.
+When a Product directory is explicitly configured, a missing or headers-only
 `gpio.csv` means that no GPIO is configured; simulated devices from `i2c.csv`
 and `spi.csv` are still loaded. A missing directory or malformed existing CSV
 is an error rather than a reason to silently use unrelated line numbers.
@@ -48,19 +68,17 @@ is an error rather than a reason to silently use unrelated line numbers.
 ```bash
 python3 -m pip install \
   -r targets/linux-device/runtime/web-bridge/requirements.txt
-GAR_HARDWARE_DIR=targets/linux-device/hardware \
+GAR_HARDWARE_DIR=/path/to/product/hardware \
   python3 targets/linux-device/runtime/web-bridge/bridge.py
 python3 -m unittest discover \
   -s targets/linux-device/runtime/web-bridge/tests -v
-python3 targets/linux-device/runtime/web-bridge/tests/smoke_bridge.py \
-  targets/linux-device/hardware \
-  targets/luckfox-rv1106/hardware
+python3 targets/linux-device/runtime/web-bridge/tests/smoke_bridge.py
 ```
 
-The last command starts an isolated live bridge for each hardware directory
-and checks HTTP state/static delivery, same-origin WebSocket access, invalid
-request and framebuffer handling, traversal rejection, Unix-socket ownership,
-and safe recovery from a stale socket.
+The last command creates isolated test-only hardware fixtures, starts a live
+bridge for each fixture, and checks HTTP state/static delivery, same-origin
+WebSocket access, invalid request and framebuffer handling, traversal rejection,
+Unix-socket ownership, and safe recovery from a stale socket.
 
 The bridge listens on `127.0.0.1:8080` by default. Set `GAR_BRIDGE_HOST` or
 `GAR_BRIDGE_PORT` when another bind address or port is required. In particular,

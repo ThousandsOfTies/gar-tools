@@ -24,9 +24,9 @@ The product build hook combines this template with the product's application
 source, builds the firmware, and writes a `deploy.app` artifact. `gar sim app
 deploy` materializes that artifact into the selected runtime workspace. The
 deployed project can then be opened by the VS Code Wokwi extension or run with
-`gar sim runtime start`.
+`gar sim start runtime`.
 
-`gar setup` only selects and installs the backend. `gar sim runtime start` only
+`gar config` only selects and installs the backend. `gar sim start runtime` only
 launches an already deployed project; neither command invokes the workspace
 generator.
 

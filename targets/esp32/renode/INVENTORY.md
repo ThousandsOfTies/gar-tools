@@ -34,7 +34,6 @@ Decision words:
 | M5Stack Renode script | `targets/esp32/renode/run-m5stack-core2-sketch.resc` | write | Loads the sketch and reports its current limitation. |
 | M5Status Tiny smoke | `targets/esp32/renode/m5status-tiny/` | reuse | Verified Xtensa ELF execution and UART Robot assertion. |
 | Protocol-level virtual device | selected product workspace | reuse | Fast fallback that does not execute firmware. |
-| Bluetooth SPP probe | `targets/esp32/probes/spp-jsonl/bin/gar-spp-jsonl-probe` | reuse | Real-device JSON Lines transport probe. |
 
 ## Target priority
 

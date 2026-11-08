@@ -6,21 +6,34 @@ scriptではなく、`GaplessAgentRuntime`の`gar` CLIです。
 
 主な内容:
 
+- `web-simulator/`: [App・target共通のシミュレータ部品](web-simulator/README.md)。
+  可変サイズ表示、LVGL、操作パネル、ログ、PCA9685、サーボ、ゲームパッド、通信を組み合わせて使います。
 - `targets/linux-device/`: Linux `/dev`互換runtimeとlocal Docker環境
-- `targets/esp32/`: ESP32/M5Stack向けWokwi、QEMU、Renode、実機probe
+- `targets/esp32/`: ESP32/M5Stack向けWokwi、QEMU、Renode、実機probe、
+  [T-Watch 2020 V3用Webコンポーネント](targets/esp32/web-simulator/README.md)
 - `targets/luckfox-rv1106/`: Luckfox Pico Plus/Pro/Max向けhardware定義、
   application雛形、simulation helper
 - `targets/luckfox-rk3506/`: Luckfox Lyra Plus（RK3506 / Buildroot / armv7l）
   実機Target定義。RV1106とは独立して選択する
 - `targets/raspberry-pi-5/`: Raspberry Pi OS実機とSSH/systemd provisioning recipe
-- `targets/*/target.json`: `gar setup`が検証・選択するtarget manifest
+- `targets/frdm-imx91s/`: NXP FRDM-IMX91S向けUUU/SPI-NAND factory flow、
+  read-only layout probe、WSL2 USB bring-up、再利用可能なstaging helper
+- `targets/*/target.json`: `gar config`が検証・選択するtarget manifest
 - `docs/`: simulation設定とAI agent向けの補足資料
 
 各targetの`hardware/capabilities.json`はboard/OSが提供するGPIO、SPI、video、
-networkなどの能力を宣言するTarget Pack contractです。`hardware/*.csv`は空の
-assignment templateであり、product固有の要件・部品・配線を含めません。productの
-定義は`gar hw init`でworkspaceへ展開してから編集し、実際のpin/bus割当は
-Product所有のTarget bindingとして管理します。SSH/IP等の個体差だけをmachine-local設定に残します。
+networkなどの能力を宣言するTarget Pack contractです。applicationの要件・部品・
+配線を表す`hardware/*.csv`はここには置かず、各Product workspaceが所有してGARへ
+入力します。`gar hw init`はtarget非依存の空schemaをProduct側に生成します。実際の
+pin/bus割当はProduct所有のTarget bindingとして管理し、SSH/IP等の個体差だけを
+machine-local設定に残します。
+
+Target Packに残すものは、`target.json`、board/OS capability、provisioning、
+toolchain、実機bring-up、汎用device provider/emulatorです。特定Productの画面構成、
+通信payload、認証、状態機械、シナリオ、配線、application scaffoldは各Product
+workspaceへ置き、artifact・`hardware.path`・runtime入力を通してTarget toolへ渡します。
+たとえばILI9341 providerはhardware固有なのでここに残りますが、それを使うRx画面や
+GPIO割当はProduct側が所有します。
 
 ## GARから使う
 
@@ -28,18 +41,18 @@ Product所有のTarget bindingとして管理します。SSH/IP等の個体差�
 commandを実行します。
 
 ```bash
-scripts/gar setup
+scripts/gar config
 scripts/gar hw init --dir path/to/product/hardware
 
 # Linux simulationの代表的な流れ
-scripts/gar sim host start
-scripts/gar sim runtime build
-scripts/gar sim runtime deploy
-scripts/gar sim runtime start
-scripts/gar sim runtime diag --json
+scripts/gar sim start host
+scripts/gar sim build runtime
+scripts/gar sim deploy runtime
+scripts/gar sim start runtime
+scripts/gar sim diag runtime --json
 ```
 
-application artifactは`gar sim app build/deploy`、実機用artifactは
+application artifactは`gar sim build app` / `gar sim deploy app`、実機用artifactは
 `gar target build/deploy`で扱います。workspaceを複数登録している場合は
 各commandへ`--workspace NAME`を指定します。
 

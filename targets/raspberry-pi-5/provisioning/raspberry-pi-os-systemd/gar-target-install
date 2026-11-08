@@ -23,13 +23,17 @@ validate_app() {
 
 harden_application_payload() {
     application_root=$1
-    marker="$application_root/.gar-artifact.json"
     chmod go-w "$application_root"
-    if [ -e "$marker" ] || [ -L "$marker" ]; then
-        [ -f "$marker" ] && [ ! -L "$marker" ] || fail "artifact provenance marker must be a regular file"
-        chown root:root "$marker"
-        chmod 0444 "$marker"
-    fi
+    for marker in \
+        "$application_root/.artifact-info.json" \
+        "$application_root/.gar-artifact.json"
+    do
+        if [ -e "$marker" ] || [ -L "$marker" ]; then
+            [ -f "$marker" ] && [ ! -L "$marker" ] || fail "artifact provenance marker must be a regular file"
+            chown root:root "$marker"
+            chmod 0444 "$marker"
+        fi
+    done
 }
 
 register_app() {

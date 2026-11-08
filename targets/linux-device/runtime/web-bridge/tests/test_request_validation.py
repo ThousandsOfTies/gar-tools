@@ -15,12 +15,46 @@ from request_validation import (  # noqa: E402
     bounded_int,
     browser_request_allowed,
     parse_json_object,
+    pca9685_state,
     resolve_panel_file,
     rfid_uid,
 )
 
 
 class RequestValidationTests(unittest.TestCase):
+    def test_pca9685_state_requires_all_sixteen_bounded_channels(self) -> None:
+        channels = [
+            {
+                "channel": channel,
+                "on": 0,
+                "off": 307 if channel == 0 else 0,
+                "fullOn": False,
+                "fullOff": False,
+            }
+            for channel in range(16)
+        ]
+        state = pca9685_state(
+            {
+                "address": 0x40,
+                "frequencyHz": 50.0,
+                "channels": channels,
+            }
+        )
+        self.assertEqual(state["channels"][0]["off"], 307)
+
+        with self.assertRaisesRegex(RequestValidationError, "exactly 16"):
+            pca9685_state({"address": 0x40, "frequencyHz": 50, "channels": []})
+        invalid_channels = [dict(channel) for channel in channels]
+        invalid_channels[0]["off"] = 4096
+        with self.assertRaisesRegex(RequestValidationError, "between 0 and 4095"):
+            pca9685_state(
+                {
+                    "address": 0x40,
+                    "frequencyHz": 50,
+                    "channels": invalid_channels,
+                }
+            )
+
     def test_boolean_value_does_not_treat_string_zero_as_true(self) -> None:
         self.assertFalse(boolean_value({"value": "0"}, "value"))
         self.assertTrue(boolean_value({"value": "true"}, "value"))

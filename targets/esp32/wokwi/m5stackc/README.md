@@ -4,9 +4,9 @@ This directory is the source template for an M5StackC Wokwi build workspace.
 
 The product's `scripts/product-sim-build.sh` invokes
 `scripts/prepare_workspace.py`, builds the firmware, and packages a GAR
-simulation-app artifact. `gar sim app deploy` materializes the runnable files
-from that artifact into the selected runtime workspace. `gar setup` only
-selects and installs Wokwi, while `gar sim runtime start` only launches the
+simulation-app artifact. `gar sim deploy app` materializes the runnable files
+from that artifact into the selected runtime workspace. `gar config` only
+selects and installs Wokwi, while `gar sim start runtime` only launches the
 deployed project.
 
 For direct template development, run the product-owned Make target and choose a

@@ -57,7 +57,7 @@ def check_source(path: Path) -> None:
 
 def main() -> int:
     repository_root = Path(__file__).resolve().parents[1]
-    roots = [repository_root / name for name in ("targets", "tests", "tools")]
+    roots = [repository_root / name for name in ("targets", "web-simulator", "tests", "tools")]
     sources = python_sources(roots)
 
     errors: list[str] = []

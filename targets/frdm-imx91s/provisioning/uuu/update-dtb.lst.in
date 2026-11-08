@@ -1,0 +1,37 @@
+uuu_version @@UUU_VERSION@@
+
+# Update only the fixed 128 KiB SPI-NAND DTB partition. This path deliberately
+# does not touch the bootloader, kernel, config, or UBI rootfs partitions.
+SDPS[-t 10000]: boot -scanterm -f pub/u-boot/@@RAM_BOOT_IMAGE@@ -scanlimited 0x800000
+
+# Load the manufacturing Linux kernel, the replacement DTB, and initramfs.
+FB: ucmd setenv gar_kernel_addr ${loadaddr}
+FB: ucmd setenv fastboot_buffer @@FASTBOOT_BUFFER@@
+FB[-t @@TRANSFER_TIMEOUT_MS@@]: write -f @@KERNEL_TRANSFER@@ -format "setexpr gar_copy_dst ${gar_kernel_addr} + @off; cp.b ${fastboot_buffer} ${gar_copy_dst} @size" -blksz 1 -each @@TRANSFER_CHUNK_SIZE@@
+
+FB: ucmd setenv gar_dtb_addr ${fdt_addr_r}
+FB: ucmd setenv fastboot_buffer @@FASTBOOT_BUFFER@@
+FB[-t @@TRANSFER_TIMEOUT_MS@@]: write -f @@DTB_TRANSFER@@ -format "setexpr gar_copy_dst ${gar_dtb_addr} + @off; cp.b ${fastboot_buffer} ${gar_copy_dst} @size" -blksz 1 -each @@TRANSFER_CHUNK_SIZE@@
+
+FB: ucmd setenv gar_initrd_addr @@INITRD_ADDR@@
+FB: ucmd setenv fastboot_buffer @@FASTBOOT_BUFFER@@
+FB[-t @@TRANSFER_TIMEOUT_MS@@]: write -f @@INITRD_TRANSFER@@ -format "setexpr gar_copy_dst ${gar_initrd_addr} + @off; cp.b ${fastboot_buffer} ${gar_copy_dst} @size" -blksz 1 -each @@TRANSFER_CHUNK_SIZE@@
+FB: ucmd setenv gar_initrd_size @@INITRD_SIZE@@
+FB: ucmd run mfgtool_args
+FB: ucmd iminfo ${gar_initrd_addr}
+FB: ucmd setenv gar_bootcmd booti ${gar_kernel_addr} ${gar_initrd_addr} ${gar_dtb_addr}
+FB: acmd run gar_bootcmd
+
+# Refuse to write unless the live partition identity matches the fixed board
+# contract already confirmed by the read-only layout probe.
+FBK: ucmd test "$(cat /sys/class/mtd/mtd@@DTB_MTD@@/name)" = dtb
+FBK: ucmd test "$(cat /sys/class/mtd/mtd@@DTB_MTD@@/size)" = 131072
+FBK: ucmd command -v flash_erase
+FBK: ucmd command -v nandwrite
+FBK: ucmd command -v stat
+FBK: ucp pub/kernel/@@DTB@@ t:/tmp/gar-board.dtb
+FBK: ucmd test "$(stat -c %s /tmp/gar-board.dtb)" = @@DTB_SIZE_DECIMAL@@
+FBK: ucmd flash_erase /dev/mtd@@DTB_MTD@@ 0 0
+FBK: ucmd nandwrite -p /dev/mtd@@DTB_MTD@@ /tmp/gar-board.dtb
+FBK: ucmd sync
+FBK: ucmd echo GAR_IMX91S_DTB_UPDATE_COMPLETE

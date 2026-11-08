@@ -52,13 +52,13 @@ class HardwareConfigTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def test_unspecified_directory_uses_complete_demo_defaults(self) -> None:
+    def test_unspecified_directory_does_not_invent_application_hardware(self) -> None:
         config = load_hardware_config(None)
 
-        self.assertEqual(config.button_lines, (17, 27))
-        self.assertEqual(config.led_lines, (18, 24))
-        self.assertEqual(config.rotary.clock, 5)
-        self.assertEqual(config.display_dc_line, 16)
+        self.assertEqual(config.gpio_lines, ())
+        self.assertEqual(config.device_drivers, ())
+        self.assertIsNone(config.rotary)
+        self.assertIsNone(config.display_dc_line)
         self.assertIsNone(config.source_dir)
 
     def test_explicit_empty_directory_does_not_invent_demo_hardware(self) -> None:
