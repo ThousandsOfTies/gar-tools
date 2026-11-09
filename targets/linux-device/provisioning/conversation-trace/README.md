@@ -13,7 +13,8 @@ The App observer must return counts and events without payloads, restore its
 handlers within the duration, and leave the original conversation running.
 The inspector is closed after the result or a normal observer failure.
 
-Use a Product-declared `gar-target-trace.json` through `gar target trace`.
+Declare the entrypoint in the Product's `gar-operations.json` and run it through
+`gar product run trace`. A Product may retain `gar target trace` as a local alias.
 The Linux password is entered only into the local masked setup form and sent
 over SSH stdin when sudo requests it. No password is saved.
 

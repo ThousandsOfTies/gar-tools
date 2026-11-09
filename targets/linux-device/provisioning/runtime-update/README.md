@@ -4,14 +4,14 @@ This provider updates a Product-declared set of Node library files while keeping
 the existing native executables, wiring, launch files and private configuration.
 It is a script-update artifact, not a complete native firmware build.
 
-Bind it from `gar-target-update.json`. The Product owns file selection, service,
+Bind it as an operation in the Product's `gar-operations.json`. The Product owns file selection, service,
 architecture, deployment root and SSH identity. Run each phase explicitly:
 
 ```
-gar target update --workspace Local/Product --phase build --json
-gar target update --workspace Local/Product --phase preflight --json
-gar target update --workspace Local/Product --phase deploy --json
-gar target update --workspace Local/Product --phase diag --json
+gar product run update --workspace Local/Product --json -- --phase build
+gar product run update --workspace Local/Product --json -- --phase preflight
+gar product run update --workspace Local/Product --json -- --phase deploy
+gar product run update --workspace Local/Product --json -- --phase diag
 ```
 
 Build writes an immutable content-addressed snapshot under `.gar/runtime-updates`.
