@@ -138,5 +138,17 @@ when this opt-in is present, then runs the existing offline capability validator
 Explicit `--requirements` or `--binding` overrides retain their existing meaning.
 A derivation error never falls back to stale generated or authored JSON.
 Write-only SPI may omit MISO through the Product's existing `spi_miso: false`;
-clock, chip select and data wiring remain checked. I2C/MCU contracts require their
-own schema adapters; this command rejects unsupported interface kinds.
+clock, chip select and data wiring remain checked. I2C uses `frequency_hz` in the
+intent CSV, a 7-bit address from its runtime CSV, and `SDA:SDA;SCL:SCL` wiring.
+Core validation allows shared controller pins at distinct addresses, while
+rejecting address collisions, voltage/speed mismatches and foreign pin claims.
+
+MCU Products can declare `hardware.binding_csv` with `components`, `connections`
+and `board_component` instead of authoring a parallel binding JSON. Each internal
+selection connects `source=board_component`, `source_pin=<board resource name>`
+to its component ID, with `signal=display|button`. These are built-in resource
+names, not an external wiring claim or a second copy of board pin numbers.
+The board owns native display orientation. Validation is read-only; `prepare`
+derives `.gar/composition/binding.json` for existing build/hash consumers.
+`gar hw validate` delegates to the pinned MCU validator and explicitly reports
+its scope as offline built-in resource selection, without electrical verification.

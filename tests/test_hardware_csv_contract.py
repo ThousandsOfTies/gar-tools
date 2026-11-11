@@ -11,6 +11,23 @@ from hardware_contract import derive, generate
 
 
 class CsvContractTests(unittest.TestCase):
+    def test_i2c_address_comes_from_runtime_csv_and_pins_from_wiring(self):
+        with tempfile.TemporaryDirectory() as directory:
+            product = self.fixture(Path(directory))
+            product.i2c = [{'name':'lcd-controller','dev':'/dev/i2c-1','bus':'1','address':'0x40'}]
+            self.interfaces = [dict(id='controller',kind='i2c',component_id='lcd',runtime_name='lcd-controller',
+                component_pins='SDA:SDA;SCL:SCL',required_drivers='i2c-dev',voltage_v='3.3',resource='',frequency_hz='100000')]
+            self.save_interfaces(product.hardware)
+            path = product.hardware / 'connections.csv'
+            path.write_text(path.read_text()+'board,3,lcd,SDA,I2C1_SDA,Data\nboard,5,lcd,SCL,I2C1_SCL,Clock\n')
+            self.capabilities['resources'] = [{'id':'i2c1','kind':'i2c','device':'/dev/i2c-1',
+                'pinmux':{'id':'i2c1'},'signal_pins':{'SDA':'3','SCL':'5'}}]
+            requirements,binding = derive(product,self.capabilities)
+            self.assertEqual(0x40,requirements['requirements'][0]['address'])
+            self.assertEqual(100000,requirements['requirements'][0]['frequency_hz'])
+            self.assertEqual(['3:SDA','5:SCL'],binding['mappings'][0]['physical_pins'])
+            self.assertEqual(0x40,binding['mappings'][0]['address'])
+
     def fixture(self, root):
         hardware = root / 'hardware'
         hardware.mkdir()

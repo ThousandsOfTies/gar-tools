@@ -55,7 +55,9 @@ class Product:
             raise ValueError("Board/profile identity mismatch")
         self.kind = self.profile.get("kind", "linux")
         if self.kind == "platformio":
-            self.hardware = inside(self.root, self.data["hardware"]["binding"]).parent
+            source = (self.data['hardware']['binding_csv']['connections'] if self.data['hardware'].get('binding_csv')
+                      else self.data['hardware']['binding'])
+            self.hardware = inside(self.root, source).parent
             self.gpio, self.spi = [], []
         elif self.kind == "linux":
             self.hardware = inside(self.root, self.data["hardware"]["physical"])

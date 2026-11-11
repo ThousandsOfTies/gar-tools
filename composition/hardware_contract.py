@@ -49,21 +49,21 @@ def derive(product, capabilities):
     requirements, mappings, seen = [], [], set()
     for interface in interfaces:
         identity, kind, component = interface['id'], interface['kind'], interface['component_id']
-        if not identity or identity in seen or component not in names or kind not in ('gpio', 'spi', 'video', 'network'):
+        if not identity or identity in seen or component not in names or kind not in ('gpio', 'spi', 'i2c', 'video', 'network'):
             raise ValueError(f'Invalid, duplicate or unsupported interface: {identity}')
         seen.add(identity)
         drivers = [value.strip() for value in interface['required_drivers'].split(';') if value.strip()]
         if not drivers or len(set(drivers)) != len(drivers):
             raise ValueError(f'{identity}: declare unique required drivers explicitly')
         requirement = {'id': identity, 'kind': kind, 'component': component, 'required_drivers': drivers}
-        if kind in ('gpio', 'spi') or interface.get('voltage_v'):
+        if kind in ('gpio', 'spi', 'i2c') or interface.get('voltage_v'):
             voltage = float(interface['voltage_v'])
             if not math.isfinite(voltage) or voltage <= 0:
                 raise ValueError(f'{identity}: voltage must be a finite positive number')
             requirement['voltage_v'] = voltage
         runtime = None
         if kind != 'network':
-            table = {'gpio': product.gpio, 'spi': product.spi,
+            table = {'gpio': product.gpio, 'spi': product.spi, 'i2c': getattr(product, 'i2c', []),
                      'video': csv_rows(product.hardware / 'video.csv') if (product.hardware / 'video.csv').is_file() else []}[kind]
             runtime = one([row for row in table if row['name'] == interface['runtime_name']], f'{identity} runtime row')
         candidates = [resource for resource in capabilities['resources'] if resource['kind'] == kind]
@@ -87,11 +87,15 @@ def derive(product, capabilities):
             if len(pins) != 1 or expected is None or pins[0][0] != header_pin(expected):
                 raise ValueError(f'{identity}: wiring header and runtime GPIO line disagree')
             mapping['physical_pin'] = expected
-        elif kind == 'spi':
-            requirement.update(mode=int(runtime['mode']), device=runtime['dev'],
-                               min_speed_hz=int(interface.get('min_speed_hz') or runtime['max_speed_hz']))
-            if product.data['hardware'].get('spi_miso') is False:
-                requirement['requires_miso'] = False
+        elif kind in ('spi','i2c'):
+            if kind == 'spi':
+                requirement.update(mode=int(runtime['mode']), device=runtime['dev'],
+                                   min_speed_hz=int(interface.get('min_speed_hz') or runtime['max_speed_hz']))
+                if product.data['hardware'].get('spi_miso') is False:
+                    requirement['requires_miso'] = False
+            else:
+                requirement.update(device=runtime['dev'],address=int(runtime['address'],0),frequency_hz=int(interface['frequency_hz']))
+                mapping['address']=requirement['address']
             signals = {}
             for pin, signal in pins:
                 expected = resource['signal_pins'].get(signal)

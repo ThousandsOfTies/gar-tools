@@ -31,7 +31,11 @@ def validate(product):
         inside(product.components["application"], path)
     for path in profile["adapter"].values():
         inside(product.components["board"], path)
-    binding = read_json(inside(product.root, data["hardware"]["binding"]))
+    if data['hardware'].get('binding_csv'):
+        from embedded_binding import derive
+        binding = derive(product)
+    else:
+        binding = read_json(inside(product.root, data["hardware"]["binding"]))
     resources = profile["resources"]
     display = resources["display"]
     if binding.get("schema_version") != 1 or binding["display"] != display["id"]:
@@ -77,6 +81,15 @@ def cpp_namespace(name, values):
 
 def prepare(product):
     validate(product)
+    if product.data['hardware'].get('binding_csv'):
+        relative = product.data['hardware']['binding']
+        if relative != '.gar/composition/binding.json':
+            raise ValueError('CSV-derived embedded binding must use .gar/composition/binding.json')
+        destination = inside(product.root, relative, exists=False)
+        if not destination.is_relative_to(product.root / '.gar'):
+            raise ValueError('Derived embedded binding escapes generated output')
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(product.binding, indent=2) + '\n', encoding='utf-8')
     section = dict(product.profile["platformio"])
     section.pop("core_version")
     size = product.profile["flash"]["size_bytes"] // (1024 * 1024)
