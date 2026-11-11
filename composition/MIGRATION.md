@@ -37,3 +37,18 @@ start an App, connect a device, install services or substitute App protocol code
 
 All physical evaluation is skipped for the current improvement task at the
 owner's request. Preserve this distinction in subsequent validation reports.
+
+Native Linux simulation builds can declare `simulation.native_artifact`:
+an explicit `architecture`, authored `sources`, argument-array `commands`, ELF
+`outputs` and an `entrypoint`. Commands run only in a fresh source staging tree
+inside the selected Linux builder. `{root}` and `{build}` expand to that tree;
+no command is evaluated by a shell. Existing App build scripts can be invoked
+explicitly with `sh` as in ordinary GAR build hooks. Firmware/native-target
+outputs never substitute for simulation outputs.
+
+The packager verifies each ELF architecture, hashes the complete archive input,
+and emits `files/vm.tar.gz` with `simulator-manifest.json`, preserving the existing
+Product runtime adapter's deployment contract. It does not boot a VM or transfer
+source there to compile. App source, native peripheral controller, virtual I2C
+and SPI drivers remain unchanged. Product-specific commands and service files
+stay in the Product manifest/archive. Runtime deploy/start/diag remain separate.

@@ -21,13 +21,15 @@ IGNORED = shutil.ignore_patterns('.git', '.gar', '__pycache__', '*.pyc', 'node_m
 
 
 def package(product):
+    if os.name != 'posix':
+        raise ValueError('Native Linux simulation artifacts require a Linux builder (WSLC/Docker/Codespaces)')
     settings = product.data['simulation']['native_artifact']
     output = generated_output(product, 'artifacts/from-codespace')
     if output.exists():
         previous = json.loads((output / 'artifact.json').read_text(encoding='utf-8'))
         if previous.get('composition', {}).get('product') != product.id:
             raise ValueError('Refusing to replace unowned native simulation staging')
-    arch = os.environ.get('GAR_SIM_ARCH')
+    arch = os.environ.get('GAR_SIM_ARCH') or settings.get('architecture')
     if arch not in ('x86_64', 'aarch64', 'armv7l'):
         raise ValueError('GAR_SIM_ARCH must identify the declared Linux simulation host')
     output.parent.mkdir(parents=True, exist_ok=True)
