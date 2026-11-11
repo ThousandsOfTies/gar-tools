@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "commands": ["artifact", "hardware-contract"],
+  "artifact_kinds": ["target_app", "sim_app", "sim_runtime"]
+}
