@@ -1,0 +1,6 @@
+<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>USB audio parts</title>
+<style>body{font:15px system-ui;background:#eeede7;color:#263b3b;margin:25px}main{display:flex;gap:30px;flex-wrap:wrap}section{width:280px;padding:20px;background:#fafaf5;border:1px solid #cbd4cc;border-radius:12px}button{padding:9px;margin-top:12px}output{display:block;font-size:12px;margin-top:10px}</style>
+<h1>USBマイク・スピーカー</h1><p>PCの音声入出力を使う、通信先やアプリを持たない部品です。</p>
+<main><section><gar-speakerphone id="first" label="USB audio A" volume="30"></gar-speakerphone><button data-start="first">開始</button><button data-stop="first">停止</button><button data-tone="first">短い音</button><output id="first-count">0 samples</output></section>
+<section><gar-speakerphone id="second" label="USB audio B · 別インスタンス" volume="70"></gar-speakerphone><button data-start="second">開始</button><button data-stop="second">停止</button><button data-tone="second">短い音</button><output id="second-count">0 samples</output></section></main>
+<script type="module" src="./parts.js"></script></html>
