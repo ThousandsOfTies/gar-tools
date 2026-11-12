@@ -71,6 +71,7 @@ check-js:
 	$(NODE) --test web-simulator/tests/*.test.mjs
 	$(NODE) --test targets/linux-device/runtime/alsa-audio/*.test.cjs targets/linux-device/runtime/gemini-live/*.test.cjs
 	$(NODE) --test transports/ble-uart/host/node-byte-port.test.cjs
+	$(NODE) --test targets/linux-device/runtime/hardware-csv/*.test.cjs
 
 check-runtime-contract:
 	$(PYTHON) tools/check_runtime_contract.py

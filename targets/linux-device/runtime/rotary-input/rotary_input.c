@@ -67,6 +67,12 @@ int main(int argc, char **argv) {
         clock_line == data_line || clock_line == switch_line || data_line == switch_line) {
         fputs("Select a GPIO chip and three distinct line offsets. Use --help.\n", stderr); return 2;
     }
+    const char *process_debounce = getenv("GAR_GPIO_DEBOUNCE_US");
+    if (process_debounce) {
+        int period = rotary_debounce_period(process_debounce);
+        if (period < 0) { fputs("Invalid GAR_GPIO_DEBOUNCE_US\n", stderr); return 2; }
+        debounce_us = (unsigned)period;
+    }
     int chip_fd = open(chip, O_RDONLY | O_CLOEXEC);
     if (chip_fd < 0) { perror("open rotary GPIO chip"); return 1; }
     struct gpio_v2_line_request request = {0};
