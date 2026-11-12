@@ -58,6 +58,18 @@ def main():
             from recipe import run
             print(run(args.root, data, args.kind, clean=args.clean))
             return
+        if args.kind == 'sim_app' and data.get('simulation', {}).get('native_artifact') and data['build'].get('backend') == 'native-make':
+            if args.clean:
+                raise ValueError('Native simulation cleanup is not declared')
+            from types import SimpleNamespace
+            from native_simulation import package
+            from product import inside
+            validator = data['simulation']['native_artifact']['validator']
+            subprocess.run([sys.executable,str(inside(args.root,validator)),'validate'],cwd=args.root,check=True)
+            product = SimpleNamespace(root=args.root.resolve(),id=data['id'],data=data,
+                                      describe=lambda:{'product':data['id'],'components':data['components']})
+            print(package(product))
+            return
     product = Product(args.root).validate()
     if args.action in ("describe", "validate"):
         print(json.dumps(product.describe(), ensure_ascii=False, indent=2))

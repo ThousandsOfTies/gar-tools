@@ -47,16 +47,28 @@ def package(product):
                 shutil.copytree(source, destination, ignore=IGNORED)
             else:
                 shutil.copyfile(source, destination)
+        host = work / '.gar-host/host.py'
+        host.parent.mkdir()
+        shutil.copyfile(Path(__file__).resolve().parents[1] / 'simulation-host/native-snapshot/host.py', host)
         build = work / 'build'
         build.mkdir()
         tools = inside(work, product.data['components']['tools'])
         environment = {**os.environ, **product.data['build'].get('environment', {}),
                        'GAR_TOOLS_ROOT': str(tools), 'GAR_BUILD_DIR': str(build)}
+        compiler_directory = work / '.gar-compiler'
+        if settings.get('linkage') == 'static':
+            compiler_directory.mkdir()
+            for name,compiler in [('cc','gcc'),('cxx','g++')]:
+                wrapper=compiler_directory/name
+                wrapper.write_text('#!/bin/sh\nexec '+compiler+' -static "$@"\n',encoding='utf-8')
+                wrapper.chmod(0o755)
+            environment.update(CC=str(compiler_directory/'cc'),CXX=str(compiler_directory/'cxx'))
         for command in settings['commands']:
             if not isinstance(command, list) or not command or not all(isinstance(value, str) for value in command):
                 raise ValueError('Simulation build commands must be nonempty argument arrays')
-            arguments = [value.replace('{build}', str(build)).replace('{root}', str(work)) for value in command]
+            arguments = [value.replace('{build}', str(build)).replace('{root}', str(work)).replace('{cc}',environment.get('CC','gcc')).replace('{cxx}',environment.get('CXX','g++')) for value in command]
             subprocess.run(arguments, cwd=work, env=environment, check=True)
+        if compiler_directory.exists():shutil.rmtree(compiler_directory)
         for name in settings['outputs']:
             binary = inside(build, name)
             header = binary.read_bytes()[:20]

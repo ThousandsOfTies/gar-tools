@@ -26,7 +26,8 @@ class NativeSimulationTests(unittest.TestCase):
             describe=lambda: {'product': 'fixture-native'}, data={
                 'components': {'tools': 'sources/tools'}, 'build': {},
                 'simulation': {'native_artifact': {'sources': ['sources/tools', 'application'],
-                    'commands': [['gcc', 'application/main.c', '-o', '{build}/application']],
+                    'linkage': 'static',
+                    'commands': [['{cc}', 'application/main.c', '-o', '{build}/application']],
                     'outputs': ['application'], 'entrypoint': 'build/application'}}})
 
     def test_actual_linux_build_has_architecture_and_source_hashes_in_archive(self):
@@ -43,6 +44,8 @@ class NativeSimulationTests(unittest.TestCase):
                     self.assertEqual(digest, hashlib.sha256(archive.extractfile(name).read()).hexdigest())
                 self.assertEqual(source, archive.extractfile('application/main.c').read())
                 self.assertTrue(archive.extractfile('build/application').read().startswith(b'\x7fELF'))
+                self.assertIn('.gar-host/host.py',checks)
+                self.assertFalse(any(name.startswith('.gar-compiler/') for name in checks))
             self.assertEqual(source, (product.root / 'application/main.c').read_bytes())
 
     def test_wrong_architecture_never_replaces_existing_snapshot_staging(self):
