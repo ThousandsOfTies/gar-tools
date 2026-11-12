@@ -1,4 +1,7 @@
 import json
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 import unittest
@@ -10,6 +13,34 @@ import test_python_composition as fixtures
 
 
 class SimulationPackageTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'posix', 'POSIX runtime reader')
+    def test_target_and_simulator_package_identical_csv_and_read_it_at_launch(self):
+        from python_app import package
+        fixture = self.fixture
+        fixture.data['hardware'] = {'physical': 'hardware', 'simulation': 'hardware'}
+        fixture.data['launch']['hardware_environment_csv'] = 'hardware/environment.csv'
+        del fixture.data['launch']['hardware_environment']
+        fixture.data['simulation']['environment']['COMPOSE_TEST_DEBOUNCE'] = '0'
+        fixture.save('hardware/environment.csv',
+            'variable,table,name,field\nCOMPOSE_TEST_GPIO,gpio,button,line\nCOMPOSE_TEST_DEBOUNCE,gpio,button,debounce_us\n')
+        loader = Path(__file__).resolve().parents[1] / 'targets/linux-device/runtime/hardware-csv'
+        shutil.copytree(loader,fixture.root/'sources/tools/targets/linux-device/runtime/hardware-csv')
+        fixture.save('product.json',fixture.data)
+        product = Product(fixture.root).validate()
+        target = package(product,'artifacts/target')/'files/unrelated-app'
+        simulated = run(product,'sim_app')/'files/unrelated-app'
+        for name in ('gpio.csv','spi.csv','environment.csv'):
+            self.assertEqual((target/'hardware'/name).read_bytes(),(simulated/'hardware'/name).read_bytes())
+            self.assertEqual((fixture.root/'hardware'/name).read_bytes(),(target/'hardware'/name).read_bytes())
+        unit = (simulated.parents[0]/'gar-sim-app.service').read_text()
+        self.assertNotIn('COMPOSE_TEST_GPIO=',unit)
+        self.assertIn('COMPOSE_TEST_DEBOUNCE=0',unit)
+        for application in (target,simulated):
+            csv_path=application/'hardware/gpio.csv'
+            csv_path.write_text(csv_path.read_text().replace('button,/dev/gpiochip0,2,','button,/dev/gpiochip0,3,'))
+            result=subprocess.run(['sh',str(application/'run')],capture_output=True,text=True,check=True)
+            self.assertEqual('3',json.loads(result.stdout)['COMPOSE_TEST_GPIO'])
+
     def setUp(self):
         self.fixture = fixtures.PythonCompositionTests('test_simulation_changes_only_declared_fields_and_defaults')
         self.fixture.setUp()

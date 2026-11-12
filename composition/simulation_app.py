@@ -8,7 +8,7 @@ import shutil
 import tempfile
 
 from product import inside
-from python_app import build, environment, generated_output, payload_files
+from python_app import build, environment, generated_output, payload_files, launch_script
 
 
 def owned_output(product):
@@ -47,7 +47,12 @@ def service(product):
         if packaging.get(key):
             lines.append(key.title() + '=' + ' '.join(packaging[key]))
     lines += ['PartOf=gar-sim.target', '', '[Service]', 'Type=simple', 'WorkingDirectory=' + destination]
-    for key, value in environment(product, 'simulation').items():
+    values = environment(product, 'simulation')
+    if product.data['launch'].get('hardware_environment_csv'):
+        from runtime_csv import references
+        inherited = product.data['simulation'].get('environment', {})
+        values = {key:value for key,value in values.items() if key not in references(product) or key in inherited}
+    for key, value in values.items():
         lines.append('Environment=' + json.dumps((key + '=' + value).replace('%', '%%')))
     # Topology overrides follow static defaults, matching GAR system deploy.
     for filename in packaging.get('environment_files', []):
@@ -58,7 +63,8 @@ def service(product):
     if not re.fullmatch(r'[A-Za-z0-9_.-]+\.py', entry):
         raise ValueError('Simulation entrypoint must be a selected Python filename')
     interpreter = product.profile['runtimes'][product.data['launch']['runtime']]
-    lines += ['ExecStart=' + interpreter + ' ' + destination + '/' + entry, 'Restart=on-failure', 'RestartSec=3', '']
+    command = '/bin/sh ' + destination + '/run' if product.data['launch'].get('hardware_environment_csv') else interpreter + ' ' + destination + '/' + entry
+    lines += ['ExecStart=' + command, 'Restart=on-failure', 'RestartSec=3', '']
     return '\n'.join(lines)
 
 
@@ -79,6 +85,10 @@ def package(product):
             destination = application / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
+        from runtime_csv import install
+        install(product, application)
+        if product.data['launch'].get('hardware_environment_csv'):
+            (application / 'run').write_text(launch_script(product), encoding='utf-8', newline='\n')
         shutil.copytree(panel, files / 'panel', ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '.git'))
         panel_destination = '/usr/local/share/gar/panels/' + app
         (files / 'panel-dir').write_text(panel_destination + '\n', encoding='utf-8')

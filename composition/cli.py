@@ -39,6 +39,10 @@ def main():
     clean = commands.add_parser("clean")
     clean.add_argument("--output", default="artifacts/from-codespace")
     args = parser.parse_args()
+    if args.action == 'hardware-contract':
+        from hardware_contract import from_manifest, generate
+        print(generate(from_manifest(args.root), args.capabilities, args.output))
+        return
     product = Product(args.root).validate()
     if args.action in ("describe", "validate"):
         print(json.dumps(product.describe(), ensure_ascii=False, indent=2))
