@@ -11,6 +11,19 @@ from hardware_contract import derive, generate
 
 
 class CsvContractTests(unittest.TestCase):
+    def test_logical_connector_is_resolved_by_board_resource_not_a_second_product_binding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            product = self.fixture(Path(directory))
+            self.interfaces = [dict(id='network',kind='network',component_id='knob',runtime_name='',
+                component_pins='PORT',required_drivers='linux-netdev')]
+            self.save_interfaces(product.hardware)
+            path=product.hardware/'connections.csv'
+            path.write_text(path.read_text()+'board,Ethernet,knob,PORT,network,Logical board connector\n')
+            self.capabilities['resources']=[{'id':'net','kind':'network','device':'eth0',
+                'pinmux':{'id':'net'},'signal_pins':{'Ethernet':'RJ45'}}]
+            _,binding=derive(product,self.capabilities)
+            self.assertEqual('RJ45',binding['mappings'][0]['physical_pin'])
+
     def test_i2c_address_comes_from_runtime_csv_and_pins_from_wiring(self):
         with tempfile.TemporaryDirectory() as directory:
             product = self.fixture(Path(directory))

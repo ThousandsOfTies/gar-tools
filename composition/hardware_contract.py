@@ -116,9 +116,12 @@ def derive(product, capabilities):
                 signals[signal] = expected
             mapping['physical_pins'] = [f'{pin}:{signal}' for signal, pin in signals.items()]
         else:
-            if len(pins) != 1 or pins[0][0] not in resource['signal_pins'].values():
+            connector = resource['signal_pins'].get(pins[0][0], pins[0][0]) if len(pins) == 1 else None
+            if connector not in resource['signal_pins'].values():
                 raise ValueError(f'{identity}: physical connector is absent or ambiguous')
-            mapping['physical_pin'] = pins[0][0]
+            # A connector can name the board's logical signal. The provider
+            # resolves its attachment; this is not an observation of a USB port.
+            mapping['physical_pin'] = connector
             if kind == 'video':
                 requirement.update(device=runtime['dev'], min_fps=int(interface.get('min_fps') or runtime['fps']))
         requirements.append(requirement)
