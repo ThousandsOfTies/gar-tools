@@ -152,3 +152,30 @@ The board owns native display orientation. Validation is read-only; `prepare`
 derives `.gar/composition/binding.json` for existing build/hash consumers.
 `gar hw validate` delegates to the pinned MCU validator and explicitly reports
 its scope as offline built-in resource selection, without electrical verification.
+
+## Declared artifact entry points
+
+GAR selects `composition/cli.py artifact --kind target_app|sim_app|sim_runtime`
+from product.json and the pinned capabilities.json. The `native-script` backend
+builds the selected App with its board toolchain, checks the target ELF and build
+receipt, and atomically stages the existing native package. A failed compiler or
+wrong ELF cannot replace a previously verified package. Clean checks Product and
+target ownership and never compiles. PlatformIO and Python use their shared
+packagers; planned ports still refuse builds.
+
+SDK-specific closure, BSP composition and pinmux may remain Product adapters.
+Declare them under `build.recipes.<artifact kind>` with `commands`, optional
+`clean_commands`, `environment` string assignments and `environment_command`.
+Commands are argv arrays, without an implicit shell. `{root}` resolves to the
+Product root. `python3` uses the selected builder's interpreter. An environment
+provider returns a JSON string-to-string object; clean receives `--clean` and
+must not generate hardware bindings. Builder-provided SDK settings are retained.
+The selected board target is checked before a provider or command executes.
+
+The recipe entry does not instantiate the generic GPIO/SPI Product model for
+SDK-only schemas. Its Product environment provider owns offline board/policy
+validation. A recipe failure never falls back to a legacy hook. This is an
+explicit adapter boundary, not a claim that SDK packaging has become generic.
+Product `scripts/product-target-build.*` may remain compatibility aliases to the
+same shared entry; they must not duplicate build/export logic. Simulation hosts
+execute captured artifacts, not compiler recipes.

@@ -66,6 +66,23 @@ class CompositionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outside"):
             Product(self.root).validate()
 
+    def test_native_artifact_stages_verified_target_and_cleans_only_its_own_output(self):
+        from native_target import run
+        product=Product(self.root).validate()
+        with patch.object(product,'build',side_effect=self.target_binary):
+            output=run(product)
+            self.assertEqual('test-board',json.loads((output/'artifact.json').read_text())['target'])
+            first=(output/'files/app/build/target/reader').read_bytes()
+            self.assertIn('recorded_start_time',(output/'files/app/.startup/S99zz-generic-product').read_text())
+            run(product)
+            self.assertEqual(first,(output/'files/app/build/target/reader').read_bytes())
+        # A bad ELF cannot replace the previously verified staging directory.
+        with patch.object(product,'build',side_effect=lambda:self.target_binary(machine=62)):
+            with self.assertRaisesRegex(ValueError,'architecture'):run(product)
+        self.assertEqual(first,(output/'files/app/build/target/reader').read_bytes())
+        run(product,clean=True)
+        self.assertFalse(output.exists())
+
     def test_paths_and_spi_limits_are_enforced(self):
         with self.assertRaisesRegex(ValueError, "escapes"):
             inside(self.root, "../outside", exists=False)

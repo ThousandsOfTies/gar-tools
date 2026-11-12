@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -43,6 +44,20 @@ def main():
         from hardware_contract import from_manifest, generate
         print(generate(from_manifest(args.root), args.capabilities, args.output))
         return
+    if args.action == 'artifact':
+        from product import read_json
+        data = read_json(args.root / 'product.json')
+        if args.kind == 'target_app':
+            from product import inside
+            board = read_json(inside(args.root, data['components']['board']) / 'board.json')
+            target = ('esp32' if data['build'].get('backend') == 'platformio'
+                      else data.get('deployment', {}).get('artifact_target', board.get('target_id', board['id'])))
+            if os.environ.get('GAR_TARGET', target) != target:
+                raise ValueError('Product has fixed target ' + target)
+        if args.kind in data['build'].get('recipes', {}):
+            from recipe import run
+            print(run(args.root, data, args.kind, clean=args.clean))
+            return
     product = Product(args.root).validate()
     if args.action in ("describe", "validate"):
         print(json.dumps(product.describe(), ensure_ascii=False, indent=2))

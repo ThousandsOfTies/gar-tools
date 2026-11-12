@@ -248,7 +248,7 @@ def package_product(product, output):
     write(app / ".startup/devices.rules", "\n".join(rules) + "\n")
     write(app / "install", install_script(product, service_name), executable=True)
     write(app / "composition.json", json.dumps(product.describe(), indent=2) + "\n")
-    manifest = {"name": product.id, "target": product.board["id"],
+    manifest = {"name": product.id, "target": product.data["deployment"].get("artifact_target", product.board["id"]),
                 "deploy": {"app": {"files": [{"src": "files/app", "dest": product.data["deployment"]["root"] + "/app"}]}},
                 "composition": product.describe()}
     write(destination / "artifact.json", json.dumps(manifest, indent=2) + "\n")

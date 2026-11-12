@@ -15,6 +15,9 @@ def run(product, kind, *, clean=False):
     if kind not in HOOKS:
         raise ValueError(f'Unknown artifact kind: {kind}')
     settings = product.data['build']
+    if kind == 'target_app' and settings.get('backend') == 'native-script':
+        from native_target import run as build_native
+        return build_native(product, clean=clean)
     if kind == 'sim_app' and product.data.get('simulation', {}).get('native_artifact'):
         if clean:
             raise ValueError('Native simulation cleanup is not declared; existing snapshots are retained')
