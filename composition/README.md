@@ -166,6 +166,8 @@ packagers; planned ports still refuse builds.
 SDK-specific closure, BSP composition and pinmux may remain Product adapters.
 Declare them under `build.recipes.<artifact kind>` with `commands`, optional
 `clean_commands`, `environment` string assignments and `environment_command`.
+Optional `configuration` sources an existing Product shell configuration before
+the fixed environment provider, preserving machine-local SDK overrides.
 Commands are argv arrays, without an implicit shell. `{root}` resolves to the
 Product root. `python3` uses the selected builder's interpreter. An environment
 provider returns a JSON string-to-string object; clean receives `--clean` and

@@ -49,6 +49,16 @@ class RecipeTests(unittest.TestCase):
                 with self.assertRaises(subprocess.CalledProcessError):run(root,data,'target_app')
             self.assertFalse((root/'called.json').exists())
 
+    @unittest.skipUnless(__import__('os').name=='posix','Existing SDK config uses a POSIX shell')
+    def test_sdk_configuration_precedes_fixed_composition_and_is_retained(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);data=self.fixture(root)
+            recipe=data['build']['recipes']['target_app'];recipe['configuration']='product.env'
+            (root/'product.env').write_text("SDK_OVERRIDE='machine-local sdk'\nRECIPE_LITERAL=overridden-by-provider\n")
+            with patch.dict('os.environ',{'GAR_TARGET':'fixture-board'}):
+                run(root,data,'target_app')
+            self.assertEqual([['build'],'literal $(echo no) False','machine-local sdk'],json.loads((root/'called.json').read_text()))
+
     def test_native_build_failure_and_foreign_staging_preserve_previous_bytes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary).resolve();output=root/'artifacts/from-codespace';output.mkdir(parents=True)

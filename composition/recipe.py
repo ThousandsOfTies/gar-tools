@@ -37,6 +37,15 @@ def run(root, data, kind, *, clean=False):
     if os.environ.get('GAR_TARGET', expected) != expected and kind == 'target_app':
         raise ValueError('Product has fixed target ' + expected)
     environment = os.environ.copy()
+    configuration = settings.get('configuration')
+    if configuration:
+        path = inside(root, configuration, exists=False)
+        if path.exists():
+            result = subprocess.run(['bash', '-c', 'set -eua; . "$1" >&2; env -0', 'gar-recipe', str(path)],
+                                    cwd=root, env=environment, capture_output=True, check=True)
+            environment = dict(item.decode().split('=', 1) for item in result.stdout.split(b'\0') if item)
+            if kind == 'target_app' and environment.get('GAR_TARGET', expected) != expected:
+                raise ValueError('Product has fixed target ' + expected)
     declared = settings.get('environment', {})
     if not isinstance(declared, dict) or not all(re.fullmatch(r'[A-Z_][A-Z0-9_]*', key) and isinstance(value, str) for key, value in declared.items()):
         raise ValueError('Invalid recipe environment')
