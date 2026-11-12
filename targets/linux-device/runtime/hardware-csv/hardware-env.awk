@@ -29,6 +29,7 @@ function quote(value,    i,c,result) {
     return result "'"
 }
 {
+    if (FNR==1) sub(/^\357\273\277/, "", $0)
     count=parse($0, cells)
     table=FILENAME; sub(/^.*\//,"",table); sub(/\.csv$/,"",table)
     if (FNR==1) {
@@ -50,6 +51,7 @@ function quote(value,    i,c,result) {
         if (variable !~ /^[A-Z][A-Z0-9_]*$/ || variable in variables) fail("invalid or duplicate variable")
         if (cells[2]!="gpio" && cells[2]!="spi") fail("unsupported runtime table")
         variables[variable]=cells[2] SUBSEP cells[3] SUBSEP cells[4]
+        mapping_count++
     } else {
         name=cells[columns["name"]]
         if (name=="" || (table SUBSEP name) in rows) fail("missing or duplicate hardware name")
@@ -59,6 +61,7 @@ function quote(value,    i,c,result) {
 }
 END {
     if (failed) exit 2
+    if (!mapping_count) fail("environment.csv must contain runtime references")
     for (variable in variables) {
         key=variables[variable]
         if (!(key in values) || values[key]=="") fail("missing CSV reference for " variable)

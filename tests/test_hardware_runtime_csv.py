@@ -44,3 +44,16 @@ class HardwareRuntimeTests(unittest.TestCase):
                 result=self.run_app(root)
                 self.assertNotEqual(0,result.returncode)
                 self.assertEqual('',result.stdout)
+
+    def test_spreadsheet_utf8_bom_crlf_and_empty_mapping(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); self.fixture(root)
+            for name in ('environment.csv','gpio.csv','spi.csv'):
+                path=root/name
+                path.write_bytes(b'\xef\xbb\xbf'+path.read_bytes().replace(b'\n',b'\r\n'))
+            result=self.run_app(root)
+            self.assertEqual(0,result.returncode,result.stderr)
+            (root/'environment.csv').write_text('variable,table,name,field\n')
+            result=self.run_app(root)
+            self.assertNotEqual(0,result.returncode)
+            self.assertEqual('',result.stdout)

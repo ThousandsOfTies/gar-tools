@@ -20,8 +20,12 @@ def from_manifest(root):
     """Contract reading is independent of a Product's native SDK build schema."""
     root = Path(root).resolve()
     data = read_json(root / 'product.json')
+    if data.get('schema_version') != 1:
+        raise ValueError('Unsupported Product composition schema')
     hardware = inside(root, data['hardware']['physical'])
     board = read_json(inside(root, data['components']['board']) / 'board.json')
+    if board.get('schema_version') != 1:
+        raise ValueError('Unsupported board schema')
     return SimpleNamespace(root=root, data=data, board=board, hardware=hardware,
         gpio=csv_rows(hardware/'gpio.csv'), spi=csv_rows(hardware/'spi.csv'),
         i2c=csv_rows(hardware/'i2c.csv') if (hardware/'i2c.csv').is_file() else [])
