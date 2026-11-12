@@ -1,0 +1,38 @@
+require "csv"
+require "ipaddr"
+require "digest"
+
+rows = CSV.read(File.join(__dir__, "machines.csv"), headers: true)
+raise "machines.csv requires name,memory_mb,cpus,bridge_port,private_ip" unless rows.headers == %w[name memory_mb cpus bridge_port private_ip]
+raise "Define at least one machine" if rows.empty?
+names = []; ports = []; addresses = []
+rows.each do |row|
+  name = row["name"]
+  raise "Invalid or duplicate machine name" unless name && name.match?(/\A[a-z][a-z0-9-]{0,39}\z/) && !names.include?(name)
+  memory = Integer(row["memory_mb"], 10); cpus = Integer(row["cpus"], 10); port = Integer(row["bridge_port"], 10)
+  raise "Invalid resources" unless memory.between?(512, 32768) && cpus.between?(1, 16) && port.between?(1024, 65535)
+  raise "Duplicate host port" if ports.include?(port)
+  address = IPAddr.new(row["private_ip"])
+  raise "Invalid or duplicate private IPv4 address" unless address.ipv4? && address.private? && !addresses.include?(address.to_s)
+  names << name; ports << port; addresses << address.to_s
+end
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "bento/ubuntu-24.04"
+  config.vm.box_version = "202510.26.0"
+  config.vm.box_architecture = "amd64"
+  config.vm.box_check_update = false
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+  rows.each do |row|
+    config.vm.define row["name"], autostart: false do |machine|
+      machine.vm.hostname = row["name"]
+      machine.vm.network "private_network", ip: row["private_ip"], virtualbox__intnet: "gar-sim-#{Digest::SHA256.hexdigest(__dir__)[0,12]}"
+      machine.vm.provider "virtualbox" do |provider|
+        provider.gui = false
+        provider.memory = Integer(row["memory_mb"], 10)
+        provider.cpus = Integer(row["cpus"], 10)
+      end
+      machine.vm.provision "shell", path: "provision.sh"
+    end
+  end
+end

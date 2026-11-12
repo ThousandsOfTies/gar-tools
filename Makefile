@@ -55,7 +55,7 @@ check-shell:
 		elif head -n 1 "$$file" | grep -Eq '^#!.*sh([[:space:]]|$$)'; then \
 			sh -n "$$file"; \
 		fi; \
-	done < <(find targets \
+	done < <(find targets simulation-host \
 		-type d \( -name .pio -o -name build -o -name __pycache__ -o -name node_modules \) -prune \
 		-o -type f -print0)
 
