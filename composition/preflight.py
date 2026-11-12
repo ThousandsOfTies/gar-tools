@@ -15,8 +15,13 @@ def check(profile, directory):
         chips = {row["chip"] for row in csv.DictReader(stream)}
     with (Path(directory) / "spi.csv").open(newline="") as stream:
         buses = {row["dev"] for row in csv.DictReader(stream)}
+    i2c_file = Path(directory) / "i2c.csv"
+    i2c = set()
+    if i2c_file.is_file():
+        with i2c_file.open(newline="") as stream:
+            i2c = {row["dev"] for row in csv.DictReader(stream)}
     deadline = time.monotonic() + profile["startup"]["device_wait_seconds"]
-    for device in sorted(chips | buses):
+    for device in sorted(chips | buses | i2c):
         while not Path(device).exists() and time.monotonic() < deadline:
             time.sleep(0.2)
         if not stat.S_ISCHR(os.stat(device).st_mode):
@@ -39,6 +44,11 @@ def check(profile, directory):
             sysfs = Path("/sys/class/spidev", Path(resource["device"]).name, "device").resolve()
             if resource["controller"] not in str(sysfs):
                 raise ValueError("SPI controller identity differs from the selected board profile")
+    for resource in profile.get("i2c", []):
+        if resource["device"] in i2c and "controller" in resource:
+            sysfs = Path("/sys/class/i2c-dev", Path(resource["device"]).name, "device").resolve()
+            if resource["controller"] not in str(sysfs):
+                raise ValueError("I2C controller identity differs from the selected board profile")
 
 
 if __name__ == "__main__":

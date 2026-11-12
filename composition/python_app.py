@@ -53,11 +53,14 @@ def environment(product, environment='physical'):
         result.update({key: str(value) for key, value in product.data['simulation']['environment'].items()})
     elif environment != 'physical':
         raise ValueError(f'Unknown environment: {environment}')
-    for key, reference in settings.get('hardware_environment', {}).items():
+    from runtime_csv import references
+    for key, reference in references(product).items():
         rows = [row for row in tables[reference['table']] if row['name'] == reference['name']]
         if len(rows) != 1 or reference['field'] not in rows[0] or rows[0][reference['field']] == '':
             raise ValueError(f'Missing or ambiguous hardware environment: {key}')
         result[key] = rows[0][reference['field']]
+    if environment == 'simulation' and settings.get('hardware_environment_csv'):
+        result.update(product.data['simulation'].get('environment', {}))
     for key, value in result.items():
         if not re.fullmatch(r'[A-Z][A-Z0-9_]*', key) or any(char in value for char in '\0\r\n'):
             raise ValueError('Invalid launch environment')
@@ -117,11 +120,16 @@ def build(product):
 def launch_script(product):
     settings = product.data['launch']
     values = environment(product)
+    from runtime_csv import references
+    runtime_csv = settings.get('hardware_environment_csv')
+    if runtime_csv:
+        values = {key:value for key,value in values.items() if key not in references(product)}
     lines = ['#!/bin/sh', 'set -eu', 'cd -- "$(dirname -- "$0")"']
     for key, value in values.items():
         lines += [f'if [ -z "${{{key}:-}}" ]; then {key}={shlex.quote(value)}; fi', f'export {key}']
     runtime = product.profile['runtimes'][settings['runtime']]
-    lines.append(f'exec {shlex.quote(runtime)} {shlex.quote(settings["entrypoint"])} "$@"')
+    prefix = '/bin/sh hardware-csv/hardware-run.sh hardware ' if runtime_csv else ''
+    lines.append(f'exec {prefix}{shlex.quote(runtime)} {shlex.quote(settings["entrypoint"])} "$@"')
     return '\n'.join(lines) + '\n'
 
 
@@ -168,6 +176,8 @@ def package(product, relative, *, replace=False):
             target = app / relative_file
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)
+        from runtime_csv import install
+        install(product, app)
         (app / 'run').write_text(launch_script(product), encoding='utf-8', newline='\n')
         (app / 'run').chmod(0o755)
         example = '# Optional runtime overrides; generated from Product defaults.\n'

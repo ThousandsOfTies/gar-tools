@@ -12,13 +12,7 @@ from unittest.mock import Mock, patch
 TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS / "composition"))
 from device import Device
-from package import (
-    configure_script,
-    install_script,
-    launch_script,
-    package_product,
-    render_service,
-)
+from package import configure_script, install_script, launch_script, package_product, render_service
 from product import Product, inside
 
 
@@ -72,6 +66,23 @@ class CompositionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outside"):
             Product(self.root).validate()
 
+    def test_native_artifact_stages_verified_target_and_cleans_only_its_own_output(self):
+        from native_target import run
+        product=Product(self.root).validate()
+        with patch.object(product,'build',side_effect=self.target_binary):
+            output=run(product)
+            self.assertEqual('test-board',json.loads((output/'artifact.json').read_text())['target'])
+            first=(output/'files/app/build/target/reader').read_bytes()
+            self.assertIn('recorded_start_time',(output/'files/app/.startup/S99zz-generic-product').read_text())
+            run(product)
+            self.assertEqual(first,(output/'files/app/build/target/reader').read_bytes())
+        # A bad ELF cannot replace the previously verified staging directory.
+        with patch.object(product,'build',side_effect=lambda:self.target_binary(machine=62)):
+            with self.assertRaisesRegex(ValueError,'architecture'):run(product)
+        self.assertEqual(first,(output/'files/app/build/target/reader').read_bytes())
+        run(product,clean=True)
+        self.assertFalse(output.exists())
+
     def test_paths_and_spi_limits_are_enforced(self):
         with self.assertRaisesRegex(ValueError, "escapes"):
             inside(self.root, "../outside", exists=False)
@@ -79,20 +90,6 @@ class CompositionTests(unittest.TestCase):
         self.save("sources/board/profiles/os.json", self.profile)
         with self.assertRaisesRegex(ValueError, "speed"):
             Product(self.root).validate()
-
-    def test_environment_resolution_preserves_legacy_profiles_and_protects_authored_input(self):
-        product = Product(self.root).validate()
-        self.assertEqual((self.root / "hardware/real").resolve(), product.hardware_for("physical"))
-        legacy = self.root / "hardware/sim"
-        legacy.mkdir()
-        self.assertEqual(legacy.resolve(), product.hardware_for("simulation"))
-        self.save("overrides.csv", "table,name,field,value\ngpio,knob,debounce_us,0\n")
-        product.data["hardware"].update(simulation_overrides="overrides.csv", simulation="hardware/real")
-        with self.assertRaisesRegex(ValueError, "Generated simulation"):
-            product.hardware_for("simulation")
-        product.data["hardware"]["simulation"] = ".gar/hardware/sim"
-        generated = product.hardware_for("simulation")
-        self.assertEqual("0", (generated / "gpio.csv").read_text().splitlines()[1].split(",")[-1])
 
     def test_board_selects_boot_mechanism_product_selects_entry_and_speed(self):
         product = Product(self.root).validate()
@@ -122,6 +119,43 @@ class CompositionTests(unittest.TestCase):
         self.target_binary(machine=62)
         with self.assertRaisesRegex(ValueError, "architecture"):
             package_product(Product(self.root), "artifacts/wrong")
+
+    def test_optional_i2c_is_validated_and_board_overlay_is_packaged(self):
+        self.profile["i2c"] = [{"device": "/dev/i2c-2", "bus": 2}]
+        self.profile["preparation"] = {"kind": "armbian-overlay", "overlay": "assets/spi.dts", "name": "generic-spi",
+                                       "boot_config": "/boot/armbianEnv.txt", "resource_overlays": [
+                                           {"device": "/dev/i2c-2", "overlay": "assets/i2c.dts", "name": "generic-i2c"}]}
+        self.save("sources/board/profiles/os.json", self.profile)
+        self.save("sources/board/assets/spi.dts", "/dts-v1/;")
+        self.save("sources/board/assets/i2c.dts", "/dts-v1/;")
+        self.save("hardware/real/i2c.csv", "name,bus,dev,address\ncontroller,2,/dev/i2c-2,0x40\n")
+        self.target_binary()
+        product = Product(self.root).validate()
+        self.assertIn("generic-i2c.dtbo", configure_script(product))
+        output = package_product(product, "artifacts/i2c")
+        self.assertTrue((output / "files/app/.board/assets/i2c.dts").is_file())
+        self.assertIn('KERNEL=="i2c-2", GROUP="i2c"', (output / "files/app/.startup/devices.rules").read_text())
+        self.save("hardware/real/i2c.csv", "name,bus,dev,address\ncontroller,99,/dev/i2c-2,0x40\n")
+        with self.assertRaisesRegex(ValueError, "I2C"):
+            Product(self.root).validate()
+
+    def test_declared_build_options_and_systemd_groups_are_bounded(self):
+        self.data["build"]["environment"] = {"GAR_OPTION": "1"}
+        self.save("product.json", self.data)
+        Product(self.root).validate()
+        self.data["build"]["environment"] = {"CC": "untrusted"}
+        self.save("product.json", self.data)
+        with self.assertRaisesRegex(ValueError, "reserved"):
+            Product(self.root).validate()
+        self.data["build"].pop("environment")
+        self.profile["startup"] = {"init": "systemd", "after": "systemd-udev-trigger.service", "device_wait_seconds": 15}
+        self.save("sources/board/profiles/os.json", self.profile)
+        self.data["deployment"].update(runtime_directory="generic-runtime", supplementary_groups=["i2c", "audio"])
+        self.save("product.json", self.data)
+        product = Product(self.root).validate()
+        service = render_service(product)[1]
+        self.assertIn("RuntimeDirectory=generic-runtime", service)
+        self.assertIn("SupplementaryGroups=audio gpio i2c spi", service)
 
     def test_bundle_pins_all_components_and_keeps_sdk_bytes_external(self):
         self.target_binary()

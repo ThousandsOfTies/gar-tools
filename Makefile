@@ -40,9 +40,10 @@ check-python:
 	$(PYTHON) -m unittest discover -s tests -v
 	$(PYTHON) -m unittest discover -s targets/esp32/web-simulator/tests -p 'test_*.py' -v
 	$(PYTHON) -m unittest discover -s targets/linux-device/runtime/web-bridge/tests -v
+	$(PYTHON) -m unittest discover -s targets/linux-device/runtime/alsa-audio -p 'test_*.py' -v
 
 check-json:
-	@find targets \
+	@find composition targets \
 		-type d \( -name .pio -o -name build -o -name __pycache__ -o -name node_modules \) -prune \
 		-o -type f -name '*.json' -print0 \
 		| xargs -0 -r -n 1 $(PYTHON) -m json.tool >/dev/null
@@ -54,7 +55,7 @@ check-shell:
 		elif head -n 1 "$$file" | grep -Eq '^#!.*sh([[:space:]]|$$)'; then \
 			sh -n "$$file"; \
 		fi; \
-	done < <(find targets \
+	done < <(find targets simulation-host \
 		-type d \( -name .pio -o -name build -o -name __pycache__ -o -name node_modules \) -prune \
 		-o -type f -print0)
 
@@ -68,6 +69,9 @@ check-js:
 	$(NODE) --check targets/esp32/web-simulator/components/lvgl-surface.mjs
 	$(NODE) --test targets/esp32/web-simulator/tests/*.test.mjs
 	$(NODE) --test web-simulator/tests/*.test.mjs
+	$(NODE) --test targets/linux-device/runtime/alsa-audio/*.test.cjs targets/linux-device/runtime/gemini-live/*.test.cjs
+	$(NODE) --test transports/ble-uart/host/node-byte-port.test.cjs
+	$(NODE) --test targets/linux-device/runtime/hardware-csv/*.test.cjs
 
 check-runtime-contract:
 	$(PYTHON) tools/check_runtime_contract.py

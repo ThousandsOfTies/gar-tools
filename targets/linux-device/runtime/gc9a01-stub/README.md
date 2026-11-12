@@ -12,6 +12,12 @@ CASET, PASET, RAMWR and the MADCTL axis bit; it does not model electrical timing
 power/gamma initialization, mirror orientation, inversion or BGR conversion.
 The circular aperture belongs to the visible display component.
 
+Applications should use the same full controller initialization on real and
+virtual devices (see `../gc9a01-output/gc9a01_linux.hpp`). Unmodelled commands
+are accepted and ignored; do not introduce a VM-specific shortened sequence in
+the application. This model is a pixel/transport check, not an electrical or
+full initialization-validity check.
+
 ```
 make -C targets/linux-device/runtime/gc9a01-stub CC=gcc
 sudo env GAR_HW_SIM_SOCK=/run/gar/hw_sim.sock targets/linux-device/runtime/gc9a01-stub/cuse_spi_gc9a01 -f --devname=spidev0.0 --dc-line=16

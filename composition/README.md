@@ -103,3 +103,81 @@ build/package still fail. Adding a board component never qualifies an unfinished
 physical port or creates an artificial successful artifact.
 
 Validation: `python3 -m unittest discover -s tests -p test_python_composition.py -v`.
+
+## CSV-owned hardware contracts
+
+`hardware.contract` opts a Product into deriving GAR's requirement and binding
+JSON from authored CSVs. Parts stay in `components.csv`, physical wiring in
+`connections.csv`, and Linux I/O assignment in the physical runtime CSVs.
+An `interfaces.csv` supplies only interface identity, component/terminal names,
+runtime row selection, driver/electrical constraints and optional resource IDs.
+Do not repeat header pins or Linux GPIO line numbers in that intent table.
+
+```json
+{"hardware":{"contract":{
+  "product":"example-app","board_component":"board",
+  "components":"hardware/components.csv","connections":"hardware/connections.csv",
+  "interfaces":"hardware/interfaces.csv"
+}}}
+```
+
+The intent columns are `id,kind,component_id,runtime_name,component_pins,required_drivers`.
+Electrical GPIO/SPI interfaces also require `voltage_v`. `resource`, `min_speed_hz`
+and `min_fps` are optional constraints. Driver and terminal lists use semicolons.
+For SPI, terminals explicitly name signals, for example
+`SDI:MOSI;SCK:SCLK;CS:CS0`; GPIO uses a single terminal such as `CLK`.
+Unspecified resources must resolve uniquely from kind/device; ambiguity fails.
+
+```sh
+python tools/product.py hardware-contract --capabilities /path/to/capabilities.json
+```
+
+Generated files live only under `.gar/hardware-contract/`. Source CSVs and authored
+JSON are never overwritten. The core `gar hw validate` derives both JSON inputs
+when this opt-in is present, then runs the existing offline capability validator.
+Explicit `--requirements` or `--binding` overrides retain their existing meaning.
+A derivation error never falls back to stale generated or authored JSON.
+Write-only SPI may omit MISO through the Product's existing `spi_miso: false`;
+clock, chip select and data wiring remain checked. I2C uses `frequency_hz` in the
+intent CSV, a 7-bit address from its runtime CSV, and `SDA:SDA;SCL:SCL` wiring.
+Core validation allows shared controller pins at distinct addresses, while
+rejecting address collisions, voltage/speed mismatches and foreign pin claims.
+
+MCU Products can declare `hardware.binding_csv` with `components`, `connections`
+and `board_component` instead of authoring a parallel binding JSON. Each internal
+selection connects `source=board_component`, `source_pin=<board resource name>`
+to its component ID, with `signal=display|button`. These are built-in resource
+names, not an external wiring claim or a second copy of board pin numbers.
+The board owns native display orientation. Validation is read-only; `prepare`
+derives `.gar/composition/binding.json` for existing build/hash consumers.
+`gar hw validate` delegates to the pinned MCU validator and explicitly reports
+its scope as offline built-in resource selection, without electrical verification.
+
+## Declared artifact entry points
+
+GAR selects `composition/cli.py artifact --kind target_app|sim_app|sim_runtime`
+from product.json and the pinned capabilities.json. The `native-script` backend
+builds the selected App with its board toolchain, checks the target ELF and build
+receipt, and atomically stages the existing native package. A failed compiler or
+wrong ELF cannot replace a previously verified package. Clean checks Product and
+target ownership and never compiles. PlatformIO and Python use their shared
+packagers; planned ports still refuse builds.
+
+SDK-specific closure, BSP composition and pinmux may remain Product adapters.
+Declare them under `build.recipes.<artifact kind>` with `commands`, optional
+`clean_commands`, `environment` string assignments and `environment_command`.
+Optional `configuration` sources an existing Product shell configuration before
+the fixed environment provider, preserving machine-local SDK overrides.
+Commands are argv arrays, without an implicit shell. `{root}` resolves to the
+Product root. `python3` uses the selected builder's interpreter. An environment
+provider returns a JSON string-to-string object; clean receives `--clean` and
+must not generate hardware bindings. Builder-provided SDK settings are retained.
+The selected board target is checked before a provider or command executes.
+
+The recipe entry does not instantiate the generic GPIO/SPI Product model for
+SDK-only schemas. Its Product environment provider owns offline board/policy
+validation. A recipe failure never falls back to a legacy hook. This is an
+explicit adapter boundary, not a claim that SDK packaging has become generic.
+Product `scripts/product-target-build.*` may remain compatibility aliases to the
+same shared entry; they must not duplicate build/export logic. Simulation hosts
+execute captured artifacts, not compiler recipes.

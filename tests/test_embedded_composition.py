@@ -1,5 +1,6 @@
 import configparser
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -96,7 +97,11 @@ class EmbeddedCompositionTests(unittest.TestCase):
         runtime, python, cache, env = runtime_paths(self.root, '6.1.19')
         self.assertIn('pio-6.1.19', runtime.name)
         self.assertTrue(python.is_relative_to(runtime))
-        self.assertTrue(cache.is_relative_to(self.root / '.cache/gar-target-build'))
+        if os.name == 'nt':
+            self.assertTrue(cache.is_relative_to(Path.home() / '.cache/gar'))
+            self.assertNotEqual(cache,runtime_paths(self.root / 'other', '6.1.19')[2])
+        else:
+            self.assertTrue(cache.is_relative_to(self.root / '.cache/gar-target-build'))
         self.assertEqual(str(cache / 'core'), env['PLATFORMIO_CORE_DIR'])
 
 

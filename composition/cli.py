@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -17,6 +19,12 @@ def main():
     commands.add_parser("describe")
     commands.add_parser("validate")
     commands.add_parser("prepare")
+    artifact = commands.add_parser("artifact")
+    artifact.add_argument("--kind", choices=["target_app", "sim_app", "sim_runtime"], required=True)
+    artifact.add_argument("--clean", action="store_true")
+    contract = commands.add_parser("hardware-contract")
+    contract.add_argument("--capabilities", type=Path, required=True)
+    contract.add_argument("--output", default=".gar/hardware-contract")
     component = commands.add_parser("component")
     component.add_argument("role", choices=["application", "tools", "board"])
     hardware = commands.add_parser("hardware")
@@ -32,6 +40,36 @@ def main():
     clean = commands.add_parser("clean")
     clean.add_argument("--output", default="artifacts/from-codespace")
     args = parser.parse_args()
+    if args.action == 'hardware-contract':
+        from hardware_contract import from_manifest, generate
+        print(generate(from_manifest(args.root), args.capabilities, args.output))
+        return
+    if args.action == 'artifact':
+        from product import read_json
+        data = read_json(args.root / 'product.json')
+        if args.kind == 'target_app':
+            from product import inside
+            board = read_json(inside(args.root, data['components']['board']) / 'board.json')
+            target = ('esp32' if data['build'].get('backend') == 'platformio'
+                      else data.get('deployment', {}).get('artifact_target', board.get('target_id', board['id'])))
+            if os.environ.get('GAR_TARGET', target) != target:
+                raise ValueError('Product has fixed target ' + target)
+        if args.kind in data['build'].get('recipes', {}):
+            from recipe import run
+            print(run(args.root, data, args.kind, clean=args.clean))
+            return
+        if args.kind == 'sim_app' and data.get('simulation', {}).get('native_artifact') and data['build'].get('backend') == 'native-make':
+            if args.clean:
+                raise ValueError('Native simulation cleanup is not declared')
+            from types import SimpleNamespace
+            from native_simulation import package
+            from product import inside
+            validator = data['simulation']['native_artifact']['validator']
+            subprocess.run([sys.executable,str(inside(args.root,validator)),'validate'],cwd=args.root,check=True)
+            product = SimpleNamespace(root=args.root.resolve(),id=data['id'],data=data,
+                                      describe=lambda:{'product':data['id'],'components':data['components']})
+            print(package(product))
+            return
     product = Product(args.root).validate()
     if args.action in ("describe", "validate"):
         print(json.dumps(product.describe(), ensure_ascii=False, indent=2))
@@ -39,6 +77,12 @@ def main():
         print(product.build(native=args.native))
     elif args.action == "prepare":
         print(product.prepare())
+    elif args.action == "artifact":
+        from artifact import run
+        print(run(product, args.kind, clean=args.clean))
+    elif args.action == "hardware-contract":
+        from hardware_contract import generate
+        print(generate(product, args.capabilities, args.output))
     elif args.action == "component":
         print(product.components[args.role])
     elif args.action == "hardware":
@@ -77,6 +121,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (ValueError, KeyError, OSError, SyntaxError) as error:
+    except (ValueError, KeyError, OSError, SyntaxError, TypeError, AttributeError, subprocess.CalledProcessError) as error:
         print(f"Composition error: {error}", file=sys.stderr)
         raise SystemExit(2) from error

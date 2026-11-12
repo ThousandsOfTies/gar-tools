@@ -55,7 +55,9 @@ class Product:
             raise ValueError("Board/profile identity mismatch")
         self.kind = self.profile.get("kind", "linux")
         if self.kind == "platformio":
-            self.hardware = inside(self.root, self.data["hardware"]["binding"]).parent
+            source = (self.data['hardware']['binding_csv']['connections'] if self.data['hardware'].get('binding_csv')
+                      else self.data['hardware']['binding'])
+            self.hardware = inside(self.root, source).parent
             self.gpio, self.spi = [], []
         elif self.kind == "linux":
             self.hardware = inside(self.root, self.data["hardware"]["physical"])
@@ -108,6 +110,19 @@ class Product:
         if self.data['build'].get('backend') in ('python', 'planned'):
             from python_app import validate
             return validate(self)
+        for name, value in self.data["build"].get("environment", {}).items():
+            if (not re.fullmatch(r"[A-Z][A-Z0-9_]*", name)
+                    or name in ("CC", "CXX", "GAR_TOOLS_ROOT", "GAR_BUILD_DIR")
+                    or not isinstance(value, str) or any(c in value for c in "\0\r\n")):
+                raise ValueError("Invalid or reserved build environment assignment")
+        for group in self.data["deployment"].get("supplementary_groups", []):
+            if not re.fullmatch(r"[a-z][a-z0-9_-]*", group):
+                raise ValueError("Invalid supplementary group")
+        directory = self.data["deployment"].get("runtime_directory")
+        if directory and not re.fullmatch(r"[a-z][a-z0-9-]*", directory):
+            raise ValueError("Invalid runtime directory")
+        if directory and self.profile["startup"]["init"] != "systemd":
+            raise ValueError("RuntimeDirectory requires a systemd board profile")
         for item in self.data["payload"]:
             inside(self.root, item)
         inside(self.components["application"], self.data["build"]["script"])
@@ -192,6 +207,7 @@ class Product:
         output = inside(self.root, self.data["build"]["directory"], exists=False)
         output.mkdir(parents=True, exist_ok=True)
         env = os.environ.copy()
+        env.update(self.data["build"].get("environment", {}))
         env.update(GAR_TOOLS_ROOT=str(self.components["tools"]), GAR_BUILD_DIR=str(output))
         if native:
             env.update(CC=env.get("CC", "gcc"), CXX=env.get("CXX", "g++"))

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import configparser
+import hashlib
 import json
 import os
 import platform
@@ -30,7 +31,11 @@ def validate(product):
         inside(product.components["application"], path)
     for path in profile["adapter"].values():
         inside(product.components["board"], path)
-    binding = read_json(inside(product.root, data["hardware"]["binding"]))
+    if data['hardware'].get('binding_csv'):
+        from embedded_binding import derive
+        binding = derive(product)
+    else:
+        binding = read_json(inside(product.root, data["hardware"]["binding"]))
     resources = profile["resources"]
     display = resources["display"]
     if binding.get("schema_version") != 1 or binding["display"] != display["id"]:
@@ -76,6 +81,15 @@ def cpp_namespace(name, values):
 
 def prepare(product):
     validate(product)
+    if product.data['hardware'].get('binding_csv'):
+        relative = product.data['hardware']['binding']
+        if relative != '.gar/composition/binding.json':
+            raise ValueError('CSV-derived embedded binding must use .gar/composition/binding.json')
+        destination = inside(product.root, relative, exists=False)
+        if not destination.is_relative_to(product.root / '.gar'):
+            raise ValueError('Derived embedded binding escapes generated output')
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(product.binding, indent=2) + '\n', encoding='utf-8')
     section = dict(product.profile["platformio"])
     section.pop("core_version")
     size = product.profile["flash"]["size_bytes"] // (1024 * 1024)
@@ -126,7 +140,13 @@ def runtime_paths(root, version):
         cache = base / "target-build" / tag
     else:
         runtime = root / ".gar/target-build-tools" / f"{tag}-pio-{version}"
-        cache = root / ".cache/gar-target-build" / tag
+        if os.name == "nt":
+            # GCC expands response files before spawning cc1plus. Deep ESP-IDF
+            # include paths can exceed Windows' process command-line limit.
+            identity = hashlib.sha256((str(root.resolve()).casefold()+":"+tag).encode()).hexdigest()[:8]
+            cache = Path.home() / ".cache/gar" / identity
+        else:
+            cache = root / ".cache/gar-target-build" / tag
     python = runtime / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     env = dict(os.environ, PLATFORMIO_CORE_DIR=str(cache / "core"),
                PLATFORMIO_BUILD_DIR=str(cache / "build"), PLATFORMIO_LIBDEPS_DIR=str(cache / "libdeps"))
