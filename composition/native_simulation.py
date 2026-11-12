@@ -24,7 +24,7 @@ def package(product):
     if os.name != 'posix':
         raise ValueError('Native Linux simulation artifacts require a Linux builder (WSLC/Docker/Codespaces)')
     settings = product.data['simulation']['native_artifact']
-    output = generated_output(product, 'artifacts/from-codespace')
+    output = generated_output(product, settings.get('output', 'artifacts/from-codespace'))
     if output.exists():
         previous = json.loads((output / 'artifact.json').read_text(encoding='utf-8'))
         if previous.get('composition', {}).get('product') != product.id:
